@@ -13,7 +13,8 @@ import sys
 import time
 
 from onlykey.client import OnlyKey, Message
-from onlykey.protocol import challenge_code_str, classify_response
+from onlykey.protocol import (challenge_code_str, classify_response,
+                              derived_recipient_payload, derived_decaps_payload)
 from . import (
     OKGETPUBKEY, OKDECRYPT, OKSETPRIV, GENERATE_ON_DEVICE,
     DEFAULT_MLKEM_SLOT, DEFAULT_XWING_SLOT,
@@ -182,15 +183,17 @@ class OnlyKeyPQ:
     def derive_recipient(self, label):
         """Derived X-Wing recipient over HID. Returns (pk_X(32), mlkem_seed(32)).
 
-        Single-report request: the 32-byte tag fits one report. Caller builds
-        the 1216-byte age recipient with derived_xwing.build_recipient().
+        Caller builds the 1216-byte age recipient with derived_xwing.build_recipient().
         """
         tag = derived_label_tag(label)
-        resp = self._send_and_receive(
-            OKGETPUBKEY, RESERVED_KEY_WEB_DERIVATION, payload=tag,
-            key_type=KEYTYPE_XWING, expected_size=DERIVED_RESP_SIZE,
-            timeout_ms=10000,
+        # Same chunked framing as derive_decaps (protocol "derived_key_hid"):
+        # [cmd][128][len][keytype][label32], key type as the first payload byte.
+        self.ok.send_large_message2(
+            msg=Message(OKGETPUBKEY),
+            payload=list(derived_recipient_payload(KEYTYPE_XWING, tag)),
+            slot_id=RESERVED_KEY_WEB_DERIVATION,
         )
+        resp = self._read_response(expected_size=DERIVED_RESP_SIZE, timeout_ms=10000)
         if len(resp) != DERIVED_RESP_SIZE:
             raise RuntimeError(
                 f"derived recipient: got {len(resp)} bytes, expected {DERIVED_RESP_SIZE}"
@@ -200,10 +203,9 @@ class OnlyKeyPQ:
     def derive_decaps(self, label, ct_x):
         """Derived X-Wing decaps over HID. Returns (ss_X(32), mlkem_seed(32)).
 
-        Sends [tag(32) || ct_X(32)] = 64 B. That exceeds one 57-byte report, so
-        it is streamed with the multi-packet path; the firmware input framing is
-        still being validated on hardware (see okcrypto_xwing_web_derive). The
-        host then finishes the ML-KEM half with derived_xwing.split_decapsulate().
+        Sends [keytype || tag(32) || ct_X(32)] = 65 B with the standard chunked
+        framing (two reports), identical in shape to derive_recipient. The host
+        then finishes the ML-KEM half with derived_xwing.split_decapsulate().
         """
         if len(ct_x) != 32:
             raise ValueError(f"ct_X must be 32 bytes, got {len(ct_x)}")
@@ -212,12 +214,12 @@ class OnlyKeyPQ:
         # per the device's webderivemode setting: 0 wants the 3-digit code
         # (the shared challenge_code rule over the request payload), 1 any
         # press (default), 2 nothing.
-        payload = tag + bytes(ct_x)
+        payload = derived_decaps_payload(KEYTYPE_XWING, tag, ct_x)
         code = challenge_code_str(payload)
         print(f"Confirm on OnlyKey: press any button (or enter challenge {code} "
               f"if webderivemode is 0)", file=sys.stderr)
         self.ok.send_large_message2(
-            msg=Message(OKDECRYPT), payload=list(tag + bytes(ct_x)),
+            msg=Message(OKDECRYPT), payload=list(payload),
             slot_id=RESERVED_KEY_WEB_DERIVATION,
         )
         resp = self._read_response(expected_size=DERIVED_RESP_SIZE, timeout_ms=30000)

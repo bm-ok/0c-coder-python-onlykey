@@ -270,6 +270,8 @@ class KnownResponse(str, Enum):
     SECPROFILE_FIRST_INIT_ONLY = 'Error Second Profile Mode may only be changed on first use'
     WIPE_MODE_LOCKED = 'Error Wipe Mode may not be changed'
     BACKUP_KEY_MODE_LOCKED = 'Error Backup Key Mode may not be changed'
+    DERIVED_REQUEST_WRONG_SIZE = 'Error derived key request wrong size'
+    DERIVED_KEY_TYPE_UNSUPPORTED = 'Error unsupported derived key type'
 
 
 def classify_response(raw):
@@ -291,6 +293,27 @@ def classify_response(raw):
 
 def is_error(raw):
     return classify_response(raw)[0] == 'error'
+
+
+# Derived keys over raw HID (slot 128): [cmd][slot][len|0xFF][keytype][label32][ct_X32?]
+DERIVED_RECIPIENT_LEN = 33
+DERIVED_DECAPS_LEN = 65
+
+
+def derived_recipient_payload(key_type, label32):
+    """Payload for the OKGETPUBKEY derived-recipient request (one chunk)."""
+    label32 = bytes(label32)
+    if len(label32) != 32:
+        raise ValueError('label32 must be 32 bytes')
+    return bytes([int(key_type) & 0x0F]) + label32
+
+
+def derived_decaps_payload(key_type, label32, ct_x):
+    """Payload for the OKDECRYPT derived-decaps request; also what the challenge code hashes."""
+    label32, ct_x = bytes(label32), bytes(ct_x)
+    if len(label32) != 32 or len(ct_x) != 32:
+        raise ValueError('label32 and ct_x must be 32 bytes each')
+    return bytes([int(key_type) & 0x0F]) + label32 + ct_x
 
 
 CAPABILITIES_MAGIC = 202
