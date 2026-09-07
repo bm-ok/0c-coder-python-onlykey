@@ -13,6 +13,7 @@ import sys
 import time
 
 from onlykey.client import OnlyKey, Message
+from onlykey.protocol import challenge_code_str, classify_response
 from . import (
     OKGETPUBKEY, OKDECRYPT, OKSETPRIV, GENERATE_ON_DEVICE,
     DEFAULT_MLKEM_SLOT, DEFAULT_XWING_SLOT,
@@ -109,8 +110,8 @@ class OnlyKeyPQ:
                 continue
             if not data:
                 continue
-            text = bytes(data).decode("ascii", errors="ignore")
-            if text.startswith("Error"):
+            kind, text = classify_response(data)
+            if kind == "error":
                 raise RuntimeError(f"OnlyKey: {text.strip()}")
             result.extend(data)
             if expected_size and len(result) >= expected_size:
@@ -207,16 +208,14 @@ class OnlyKeyPQ:
         if len(ct_x) != 32:
             raise ValueError(f"ct_X must be 32 bytes, got {len(ct_x)}")
         tag = derived_label_tag(label)
-        # The firmware now gates this on user presence like every other
-        # OKDECRYPT (libraries fix/derived-xwing-led-fade). In the default
-        # challenge mode it wants the 3-digit code derived exactly as
-        # done_process_packets() does: SHA-256 over the request payload,
-        # bytes 0/15/31 mod 6, plus one. In derivedkeymode 1 any press works.
+        # The firmware gates this on user presence like every other OKDECRYPT,
+        # per the device's webderivemode setting: 0 wants the 3-digit code
+        # (the shared challenge_code rule over the request payload), 1 any
+        # press (default), 2 nothing.
         payload = tag + bytes(ct_x)
-        h = hashlib.sha256(payload).digest()
-        code = " ".join(str(h[i] % 6 + 1) for i in (0, 15, 31))
-        print(f"Confirm on OnlyKey: enter challenge {code} "
-              f"(or press any button if derivedkeymode is 1)", file=sys.stderr)
+        code = challenge_code_str(payload)
+        print(f"Confirm on OnlyKey: press any button (or enter challenge {code} "
+              f"if webderivemode is 0)", file=sys.stderr)
         self.ok.send_large_message2(
             msg=Message(OKDECRYPT), payload=list(tag + bytes(ct_x)),
             slot_id=RESERVED_KEY_WEB_DERIVATION,

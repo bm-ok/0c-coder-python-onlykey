@@ -421,7 +421,7 @@ def cli():
                 elif sys.argv[2] == 'HMAC2':
                     slot_id = 129
                 if (sys.argv[1]=='genkey'):
-                    if (slot_id > 100 and (sys.argv[3] in ('x', 'n', 's', 'm', 'w'))):
+                    if (slot_id > 100 and (sys.argv[3] in ('x', 'n', 's', 'c', 'm', 'w'))):
                         only_key.setkey(slot_id, sys.argv[3], sys.argv[4], 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
                     else:
                         print('Input error. See available commands with examples here https://docs.crp.to/command-line.html')
@@ -727,6 +727,8 @@ def cli():
                 return
         elif sys.argv[1] == 'version':
             print('OnlyKey CLI v1.2.10')
+        elif sys.argv[1] == 'capabilities':
+            only_key.displaycapabilities()
         elif sys.argv[1] == 'fwversion':
             only_key.set_time(time.time())
             okversion = only_key.read_string()
@@ -1165,7 +1167,7 @@ def cli():
                     continue
                 try:
                     if (data[0]=='genkey'):
-                        if (slot_id > 100 and (data[2] in ('x', 'n', 's', 'm', 'w'))):
+                        if (slot_id > 100 and (data[2] in ('x', 'n', 's', 'c', 'm', 'w'))):
                             only_key.setkey(slot_id, data[2], data[3], 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
                         else:
                             print('Input error. See available commands with examples here https://docs.crp.to/command-line.html')
@@ -1386,6 +1388,11 @@ def cli():
                     print('OnlyKey CLI v1.2.10')
                 except:
                     continue
+            elif data[0] == 'capabilities':
+                try:
+                    only_key.displaycapabilities()
+                except:
+                    print(sys.exc_info()[0])
             elif data[0] == 'fwversion':
                 try:
                     only_key.set_time(time.time())

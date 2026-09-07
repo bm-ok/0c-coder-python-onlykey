@@ -110,6 +110,12 @@ A command line tool for setting PIN on OnlyKey (Initial Configuration)
 #### version
 Displays the version of the app
 
+#### capabilities
+Asks the firmware what it supports (needs firmware with protocol v1 or later): firmware version,
+key types, build flags (PQC, DUO, debug, whether the no-press user input mode is compiled in) and
+the user input modes each of derivedkeymode / storedkeymode / webderivemode accepts. Older
+firmware prints that it does not report capabilities.
+
 #### fwversion
 Displays the version of the OnlyKey firmware
 
@@ -257,9 +263,12 @@ Sets raw private keys and key labels, to set PEM format keys use the OnlyKey App
   - [key slot] must be key number RSA1 - RSA4, ECC1 - ECC16, HMAC1 - HMAC2
   - [type] must be one of the following:
     - label - set to have a descriptive key label i.e. My GPG signing key
-    - x - X25519 Key Type (32 bytes)
+    - x - Ed25519 Key Type (32 bytes, signing)
     - n - NIST256P1 Key Type (32 bytes)
     - s - SECP256K1 Key Type (32 bytes)
+    - c - X25519 (Curve25519) Key Type (32 bytes, decryption only)
+    - m - ML-KEM-768 seed (64 bytes, decryption only)
+    - w - X-Wing seed (32 bytes, decryption only)
     - 2 - RSA Key Type 2048bits (256 bytes)
     - 4 - RSA Key Type 4096bits (512 bytes)
     - h - HMAC Key Type (20 bytes)
@@ -273,9 +282,12 @@ Sets raw private keys and key labels, to set PEM format keys use the OnlyKey App
 Generates random private key on device
   - [key slot] must be key number ECC1 - ECC16 (only ECC keys supported)
   - [type] must be one of the following:
-    - x - X25519 Key Type (32 bytes)
-    - n - NIST256P1 Key Type (32 bytes)
-    - s - SECP256K1 Key Type (32 bytes)
+    - x - Ed25519 Key Type
+    - n - NIST256P1 Key Type
+    - s - SECP256K1 Key Type
+    - c - X25519 (Curve25519) Key Type
+    - m - ML-KEM-768 Key Type
+    - w - X-Wing Key Type
   - [features] must be one of the following:
     - s - Use for signing
     - d - Use for decryption

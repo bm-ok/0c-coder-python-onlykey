@@ -156,65 +156,15 @@ SLOTS_NAME_DUO= {
 }
 
 
-class Message(Enum):
-    OKSETPIN = 225  # 0xE1
-    OKSETSDPIN = 226  # 0xE2
-    OKSETPDPIN = 227  # 0xE3
-    OKSETTIME = 228  # 0xE4
-    OKGETLABELS = 229  # 0xE5
-    OKSETSLOT = 230  # 0xE6
-    OKWIPESLOT = 231  # 0xE7
-    OKSETU2FPRIV = 232  # 0xE8
-    OKWIPEU2FPRIV = 233  # 0xE9
-    OKSETU2FCERT = 234  # 0xEA
-    OKWIPEU2FCERT = 235  # 0xEB
-    OKGETPUBKEY = 236
-    OKSIGN = 237
-    OKWIPEPRIV = 238
-    OKSETPRIV = 239
-    OKDECRYPT = 240
-    OKRESTORE = 241
-    OKFWUPDATE = 244  # 0xF4
+# Message ids, setslot field ids and key types come from the generated protocol
+# module (libraries/onlykey/protocol/onlykey-protocol.json -> onlykey/protocol.py).
+# KeyTypeEnum is kept as a name for callers that imported it from here.
+from .protocol import (Message, MessageField, KeyType, KeyType as KeyTypeEnum,
+                       KeyFeature, UserInputMode, ReservedSlot, CLI_KEY_LETTERS,
+                       CLI_KEY_FEATURES, key_type_byte, challenge_code,
+                       challenge_code_str, classify_response, is_error,
+                       parse_capabilities, CAPABILITIES_SELECTOR)
 
-
-class MessageField(Enum):
-    LABEL = 1
-    URL = 15
-    DELAY1 = 17
-    NEXTKEY4 = 18
-    USERNAME = 2
-    NEXTKEY1 = 16
-    NEXTKEY2 = 3
-    DELAY2 = 4
-    PASSWORD = 5
-    NEXTKEY3 = 6
-    DELAY3 = 7
-    NEXTKEY5 = 19
-    TFATYPE = 8
-    TOTPKEY = 9
-    YUBIAUTH = 10
-    IDLETIMEOUT = 11
-    WIPEMODE = 12
-    KEYTYPESPEED = 13
-    KEYLAYOUT = 14
-    LEDBRIGHTNESS = 24
-    LOCKBUTTON = 25
-    HMACMODE = 26
-    SYSADMINMODE = 27
-    SECPROFILEMODE = 23
-    PGPCHALENGEMODE = 22   # stored-key user input mode
-    SSHCHALENGEMODE = 21   # derived-key user input mode
-    WEBDERIVEMODE = 30     # web derived-key user input mode (browser + age plugin)
-    BACKUPMODE = 20
-    TOUCHSENSE = 28
-
-class KeyTypeEnum(Enum):
-    ED22519 = 1
-    P256 = 2
-    SECP256K1 = 3
-    CURVE25519 = 4
-    MLKEM768 = 5
-    XWING = 6
 
 class OnlyKeyUnavailableException(Exception):
     """Exception raised when the connection to the OnlyKey failed."""
@@ -498,6 +448,34 @@ class OnlyKey(object):
 
         return slots
 
+    def getcapabilities(self):
+        """Ask the firmware what it supports (OKGETLABELS with selector 'c').
+
+        Returns the dict from onlykey.protocol.parse_capabilities, or None on
+        firmware that predates the capabilities report (it answers with slot
+        labels instead, which are drained here so the next read is clean)."""
+        self.send_message(msg=Message.OKGETLABELS, payload=[CAPABILITIES_SELECTOR[0]])
+        time.sleep(0.2)
+        first = self.read_bytes(MAX_INPUT_REPORT_SIZE, timeout_ms=500)
+        caps = parse_capabilities(first)
+        if caps is None:
+            for _ in range(12):  # old firmware: drain the slot-label reply
+                if not self.read_bytes(MAX_INPUT_REPORT_SIZE, timeout_ms=100):
+                    break
+        return caps
+
+    def displaycapabilities(self):
+        caps = self.getcapabilities()
+        if caps is None:
+            print('Firmware does not report capabilities (older than protocol v1)')
+            return
+        print('firmware      ', caps['version'])
+        print('protocol      ', caps['protocol_version'])
+        print('key types     ', ' '.join(k.name for k in caps['key_types']))
+        print('flags         ', ' '.join(f.name for f in caps['flags']) or '-')
+        for field, modes in caps['user_input_modes'].items():
+            print('%-14s' % field.lower(), ' '.join(m.name.lower() for m in modes))
+
     def displaykeylabels(self):
         global slot
         time.sleep(2)
@@ -534,29 +512,13 @@ class OnlyKey(object):
         # slot 129-130 HMAC Keys
         # slot 101-116 ECC Keys
         # slot 1-4 RSA Keys
-        # set key type
-        if key_type == 'x':
-            key_type = '1'
-        elif key_type == 'n':
-            key_type = '2'
-        elif key_type == 's':
-            key_type = '3'
-        elif key_type == 'm':
-            key_type = '5'
-        elif key_type == 'w':
-            key_type = '6'
-        elif key_type == 'h':
-            key_type = '9'
-        # set key features
-        if key_features == 'd':
-            key_type = int(key_type) + 32 # Decrypt flag
-        elif key_features == 's':
-            key_type = int(key_type) + 64 # Sign flag
-        elif key_features == 'b':
-            key_type = int(key_type) + 32 # Decrypt flag
-            key_type = int(key_type) + 128 # Backup flag
+        # set key type + features from the shared CLI letter tables
+        # (setkey <slot> <x|n|s|c|m|w|h> <d|s|b> <hex>); a numeric key_type is passed through.
+        if key_type in CLI_KEY_LETTERS:
+            key_type = int(CLI_KEY_LETTERS[key_type])
         else:
             key_type = int(key_type)
+        key_type |= int(CLI_KEY_FEATURES.get(key_features, 0))
         logging.debug('SETTING KEY IN SLOT:', slot_number)
         logging.debug('TO TYPE:', key_type)
         logging.debug('KEY:', value)
