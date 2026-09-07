@@ -222,6 +222,22 @@ class ReservedSlot(IntEnum):
     HMACSHA1_1 = 130
     DEFAULT_BACKUP = 131
     DERIVATION = 132
+    DERIVATION_V2 = 232
+
+
+# SSH/GPG agent derivation codes (slot byte). v1 = released SHA256 KDF, v2 = HKDF.
+AGENT_DERIVATION = {
+    'v1': {
+        'pubkey_slot': 132,
+        'sign': {KeyType.ED25519: 201, KeyType.P256R1: 202, KeyType.P256K1: 203},
+        'decrypt': {KeyType.P256R1: 202, KeyType.P256K1: 203, KeyType.CURVE25519: 204},
+    },
+    'v2': {
+        'pubkey_slot': 232,
+        'sign': {KeyType.ED25519: 221, KeyType.P256R1: 222, KeyType.P256K1: 223},
+        'decrypt': {KeyType.P256R1: 222, KeyType.P256K1: 223, KeyType.CURVE25519: 224},
+    },
+}
 
 
 class DeriveAction(IntEnum):
