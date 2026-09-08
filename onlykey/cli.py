@@ -437,14 +437,18 @@ def cli():
                 return
         elif sys.argv[1] == 'setpqc':
             # Load a composite PQC PGP key (IETF OpenPGP-PQC) into an RSA slot.
-            # setpqc [RSA1-RSA4] [160-byte hex blob | path to .hex/.bin file]
+            # setpqc [PQC1-PQC4] [160-byte hex blob | path to .hex/.bin file]
             # blob layout (see onlykey/pqc.py): Ed25519(32)|ML-DSA seed(32)|X25519(32)|ML-KEM seed(64)
             try:
                 from . import pqc
-                slotmap = {'RSA1': 1, 'RSA2': 2, 'RSA3': 3, 'RSA4': 4}
+                # Composite PQC keys occupy the 4 RSA key slots on the device.
+                # The CLI names them PQC1-PQC4; RSA1-RSA4 stay as aliases so
+                # existing scripts keep working.
+                slotmap = {'PQC1': 1, 'PQC2': 2, 'PQC3': 3, 'PQC4': 4,
+                           'RSA1': 1, 'RSA2': 2, 'RSA3': 3, 'RSA4': 4}
                 slot_id = slotmap.get(sys.argv[2])
                 if not slot_id:
-                    print('setpqc [RSA1-RSA4] [160-byte hex blob | file]')
+                    print('setpqc [PQC1-PQC4] [160-byte hex blob | file]')
                     sys.exit(1)
                 arg = sys.argv[3]
                 if os.path.isfile(arg):
@@ -465,19 +469,23 @@ def cli():
                 print('Loaded composite PQC PGP key (%d bytes) into %s' % (len(blob), sys.argv[2]))
             except Exception:
                 print(sys.exc_info()[1])
-                print('setpqc [RSA1-RSA4] [160-byte hex blob | file]')
+                print('setpqc [PQC1-PQC4] [160-byte hex blob | file]')
                 sys.exit(1)
         elif sys.argv[1] == 'loadpqc':
             # Parse a composite PQC PGP private key FILE (via the OpenPGP.js bridge)
             # and load its 160-byte seed blob into an RSA slot. Needs Node.js.
-            # loadpqc <keyfile.asc> [RSA1-RSA4] [passphrase]
+            # loadpqc <keyfile.asc> [PQC1-PQC4] [passphrase]
             try:
                 from . import pqc, pgp_bridge
                 keyfile = sys.argv[2]
-                slotmap = {'RSA1': 1, 'RSA2': 2, 'RSA3': 3, 'RSA4': 4}
+                # Composite PQC keys occupy the 4 RSA key slots on the device.
+                # The CLI names them PQC1-PQC4; RSA1-RSA4 stay as aliases so
+                # existing scripts keep working.
+                slotmap = {'PQC1': 1, 'PQC2': 2, 'PQC3': 3, 'PQC4': 4,
+                           'RSA1': 1, 'RSA2': 2, 'RSA3': 3, 'RSA4': 4}
                 slot_id = slotmap.get(sys.argv[3]) if len(sys.argv) > 3 else 1
                 if not slot_id:
-                    print('loadpqc <keyfile> [RSA1-RSA4] [passphrase]')
+                    print('loadpqc <keyfile> [PQC1-PQC4] [passphrase]')
                     sys.exit(1)
                 passphrase = sys.argv[4] if len(sys.argv) > 4 else None
                 blob = pgp_bridge.composite_blob(path=keyfile, passphrase=passphrase)
@@ -486,11 +494,11 @@ def cli():
                       % (keyfile, len(blob), slot_id))
             except Exception:
                 print(sys.exc_info()[1])
-                print('loadpqc <keyfile> [RSA1-RSA4] [passphrase]')
+                print('loadpqc <keyfile> [PQC1-PQC4] [passphrase]')
                 sys.exit(1)
         elif sys.argv[1] == 'signpqc':
             # Sign a digest with ONE half of a composite PQC PGP key.
-            # signpqc [RSA1-RSA4] [ecc|pqc] [digest hex | file]
+            # signpqc [PQC1-PQC4] [ecc|pqc] [digest hex | file]
             #   ecc -> Ed25519,    64-byte signature
             #   pqc -> ML-DSA-65,  3309-byte signature
             #
@@ -502,15 +510,19 @@ def cli():
             # real signature out of the device at all.
             try:
                 from . import pqc
-                slotmap = {'RSA1': 1, 'RSA2': 2, 'RSA3': 3, 'RSA4': 4}
+                # Composite PQC keys occupy the 4 RSA key slots on the device.
+                # The CLI names them PQC1-PQC4; RSA1-RSA4 stay as aliases so
+                # existing scripts keep working.
+                slotmap = {'PQC1': 1, 'PQC2': 2, 'PQC3': 3, 'PQC4': 4,
+                           'RSA1': 1, 'RSA2': 2, 'RSA3': 3, 'RSA4': 4}
                 halfmap = {'ecc': pqc.HALF_ECC, 'pqc': pqc.HALF_PQC}
                 if len(sys.argv) < 5:
-                    print('signpqc [RSA1-RSA4] [ecc|pqc] [digest hex | file]')
+                    print('signpqc [PQC1-PQC4] [ecc|pqc] [digest hex | file]')
                     sys.exit(1)
                 slot_id = slotmap.get(sys.argv[2])
                 half = halfmap.get(sys.argv[3].lower())
                 if not slot_id or half is None:
-                    print('signpqc [RSA1-RSA4] [ecc|pqc] [digest hex | file]')
+                    print('signpqc [PQC1-PQC4] [ecc|pqc] [digest hex | file]')
                     sys.exit(1)
                 digest = _pqc_input_bytes(sys.argv[4])
                 print('Press the three buttons shown on your OnlyKey to confirm signing...',
@@ -521,11 +533,11 @@ def cli():
                 raise
             except Exception:
                 print(sys.exc_info()[1])
-                print('signpqc [RSA1-RSA4] [ecc|pqc] [digest hex | file]')
+                print('signpqc [PQC1-PQC4] [ecc|pqc] [digest hex | file]')
                 sys.exit(1)
         elif sys.argv[1] == 'decryptpqc':
             # Decapsulate with ONE half of a composite PQC PGP key.
-            # decryptpqc [RSA1-RSA4] [hex | file]
+            # decryptpqc [PQC1-PQC4] [hex | file]
             #
             # The device picks the half by INPUT SIZE - there is no selector:
             #   32 bytes   -> X25519 ephemeral point -> 32-byte shared secret
@@ -539,13 +551,17 @@ def cli():
             # caller does.
             try:
                 from . import pqc
-                slotmap = {'RSA1': 1, 'RSA2': 2, 'RSA3': 3, 'RSA4': 4}
+                # Composite PQC keys occupy the 4 RSA key slots on the device.
+                # The CLI names them PQC1-PQC4; RSA1-RSA4 stay as aliases so
+                # existing scripts keep working.
+                slotmap = {'PQC1': 1, 'PQC2': 2, 'PQC3': 3, 'PQC4': 4,
+                           'RSA1': 1, 'RSA2': 2, 'RSA3': 3, 'RSA4': 4}
                 if len(sys.argv) < 4:
-                    print('decryptpqc [RSA1-RSA4] [32-byte X25519 point or 1088-byte ML-KEM ct: hex | file]')
+                    print('decryptpqc [PQC1-PQC4] [32-byte X25519 point or 1088-byte ML-KEM ct: hex | file]')
                     sys.exit(1)
                 slot_id = slotmap.get(sys.argv[2])
                 if not slot_id:
-                    print('decryptpqc [RSA1-RSA4] [hex | file]')
+                    print('decryptpqc [PQC1-PQC4] [hex | file]')
                     sys.exit(1)
                 data = _pqc_input_bytes(sys.argv[3])
                 print('Press the three buttons shown on your OnlyKey to confirm decryption...',
@@ -556,7 +572,7 @@ def cli():
                 raise
             except Exception:
                 print(sys.exc_info()[1])
-                print('decryptpqc [RSA1-RSA4] [hex | file]')
+                print('decryptpqc [PQC1-PQC4] [hex | file]')
                 sys.exit(1)
         elif sys.argv[1] == 'wipekey':
             try:
