@@ -288,6 +288,7 @@ class KnownResponse(str, Enum):
     BACKUP_KEY_MODE_LOCKED = 'Error Backup Key Mode may not be changed'
     DERIVED_REQUEST_WRONG_SIZE = 'Error derived key request wrong size'
     DERIVED_KEY_TYPE_UNSUPPORTED = 'Error unsupported derived key type'
+    PD_RETIRED = 'Error plausible deniability profile is no longer supported'
 
 
 def classify_response(raw):
