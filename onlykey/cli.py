@@ -621,11 +621,6 @@ def cli():
              only_key.setslot(1, MessageField.LEDBRIGHTNESS, int(sys.argv[2]))
         elif sys.argv[1] == 'touchsense':
             only_key.setslot(1, MessageField.TOUCHSENSE, int(sys.argv[2]))
-        elif sys.argv[1] == '2ndprofilemode':
-             if int(sys.argv[2]) != 1:
-                 print('Only the standard second profile (1) is supported; plausible deniability (2) is retired')
-             else:
-                 only_key.setslot(1, MessageField.SECPROFILEMODE, int(sys.argv[2]))
         elif sys.argv[1] in ('storedkeymode', 'derivedkeymode', 'webderivemode'):
             # User input mode, one enum for all three: 0 = challenge code,
             # 1 = button press, 2 = no press. For stored/derived keys, 2 is only
@@ -1284,14 +1279,6 @@ def cli():
             elif data[0] == 'backupkeymode':
                 try:
                     only_key.setslot(1, MessageField.BACKUPMODE, int(data[1]))
-                except:
-                    continue
-            elif data[0] == '2ndprofilemode':
-                try:
-                    if int(data[1]) != 1:
-                        print('Only the standard second profile (1) is supported; plausible deniability (2) is retired')
-                    else:
-                        only_key.setslot(1, MessageField.SECPROFILEMODE, int(data[1]))
                 except:
                     continue
             elif data[0] == 'keylayout':

@@ -193,9 +193,6 @@ Change the OnlyKey's button touch sensitivity.
 WARNING: Setting button's touch sensitivity lower than 5 is not recommended as this could result in inadvertent button press.
 2 = highest sensitivity; 100 = lowest sensitivity [12 = default]
 
-#### 2ndprofilemode [num]
-Set during init (Initial Configuration) to set 2nd profile type 1 = standard (default); 2 = plausible deniability
-
 #### storedkeymode [num]
 User input required to use a stored key (RSA slots 1-4, ECC slots 101-132 - any protocol: SSH, PGP, age, composite PQC)
 0 = Challenge Code Required; 1 = Button Press Required (default); 2 = No press (unattended agents - only honoured by firmware built with OK_ALLOW_NO_PRESS, refused otherwise)
