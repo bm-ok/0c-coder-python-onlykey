@@ -15,6 +15,7 @@ import time
 from onlykey.client import OnlyKey, Message
 from onlykey.protocol import (challenge_code_str, classify_response,
                               derived_recipient_payload, derived_decaps_payload)
+from .protocol import notify
 from . import (
     OKGETPUBKEY, OKDECRYPT, OKSETPRIV, GENERATE_ON_DEVICE,
     DEFAULT_MLKEM_SLOT, DEFAULT_XWING_SLOT,
@@ -132,7 +133,7 @@ class OnlyKeyPQ:
         in ``slot`` (not from the packet), waits for a button press, then returns
         the 32-byte shared secret.
         """
-        print("Press OnlyKey button to confirm decryption...", file=sys.stderr)
+        notify("Press OnlyKey button to confirm decryption...")
         self.ok.send_large_message2(
             msg=Message(OKDECRYPT), payload=list(ciphertext), slot_id=slot,
         )
@@ -141,7 +142,7 @@ class OnlyKeyPQ:
     def xwing_keygen(self, slot=DEFAULT_XWING_SLOT):
         """Generate an X-Wing keypair in the given ECC slot. Returns 1216-byte pubkey."""
         slot = validate_ecc_slot(slot)
-        print("Press OnlyKey button to confirm key generation...", file=sys.stderr)
+        notify("Press OnlyKey button to confirm key generation...")
         pk = self._send_and_receive(
             OKSETPRIV, slot,
             payload=GENERATE_ON_DEVICE, key_type=KEYTYPE_XWING,
@@ -216,8 +217,8 @@ class OnlyKeyPQ:
         # press (default), 2 nothing.
         payload = derived_decaps_payload(KEYTYPE_XWING, tag, ct_x)
         code = challenge_code_str(payload)
-        print(f"Confirm on OnlyKey: press any button (or enter challenge {code} "
-              f"if webderivemode is 0)", file=sys.stderr)
+        notify(f"Confirm on OnlyKey: press any button (or enter challenge {code} "
+              f"if webderivemode is 0)")
         self.ok.send_large_message2(
             msg=Message(OKDECRYPT), payload=list(payload),
             slot_id=RESERVED_KEY_WEB_DERIVATION,
@@ -232,7 +233,7 @@ class OnlyKeyPQ:
     def mlkem_keygen(self, slot=DEFAULT_MLKEM_SLOT):
         """Generate an ML-KEM-768 keypair in the given ECC slot. Returns 1184-byte pubkey."""
         slot = validate_ecc_slot(slot)
-        print("Press OnlyKey button to confirm key generation...", file=sys.stderr)
+        notify("Press OnlyKey button to confirm key generation...")
         return self._send_and_receive(
             OKSETPRIV, slot,
             payload=GENERATE_ON_DEVICE, key_type=KEYTYPE_MLKEM768,

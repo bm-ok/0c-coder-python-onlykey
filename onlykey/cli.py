@@ -134,9 +134,7 @@ def cli():
                 print ()
         elif sys.argv[1] == 'getlabels':
             tmp = {}      
-            only_key.set_time(time.time())
-            okversion = only_key.read_string()
-            if okversion[19] == 'c':
+            if not only_key.is_duo():
                 for slot in only_key.getlabels():
                     tmp[slot.name] = slot
                     slots = iter(['1a', '1b', '2a', '2b', '3a', '3b', '4a', '4b', '5a', '5b', '6a', '6b'])
@@ -875,9 +873,7 @@ def cli():
                     print()
             elif data[0] == 'getlabels':
                 tmp = {}      
-                only_key.set_time(time.time())
-                okversion = only_key.read_string()
-                if okversion[19] == 'c':
+                if not only_key.is_duo():
                     for slot in only_key.getlabels():
                         tmp[slot.name] = slot
                         slots = iter(['1a', '1b', '2a', '2b', '3a', '3b', '4a', '4b', '5a', '5b', '6a', '6b'])

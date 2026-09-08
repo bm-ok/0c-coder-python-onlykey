@@ -163,7 +163,7 @@ from .protocol import (Message, MessageField, KeyType, KeyType as KeyTypeEnum,
                        KeyFeature, UserInputMode, ReservedSlot, CLI_KEY_LETTERS,
                        CLI_KEY_FEATURES, key_type_byte, challenge_code,
                        challenge_code_str, classify_response, is_error,
-                       parse_capabilities, CAPABILITIES_SELECTOR)
+                       parse_capabilities, CAPABILITIES_SELECTOR, CapabilityFlag)
 
 
 class OnlyKeyUnavailableException(Exception):
@@ -463,6 +463,17 @@ class OnlyKey(object):
                 if not self.read_bytes(MAX_INPUT_REPORT_SIZE, timeout_ms=100):
                     break
         return caps
+
+    def is_duo(self):
+        """True for an OnlyKey DUO. Uses the capabilities report (firmware
+        3.1.0+); older firmware falls back to the version-string suffix
+        (\'c\' = Color/original, \'d\' = DUO)."""
+        caps = self.getcapabilities()
+        if caps is not None:
+            return CapabilityFlag.DUO in caps['flags']
+        self.set_time(time.time())
+        version = self.read_string()
+        return not version.rstrip().endswith('c')
 
     def displaycapabilities(self):
         caps = self.getcapabilities()
