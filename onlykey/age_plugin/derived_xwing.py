@@ -1,7 +1,7 @@
 """Derived (label-based) X-Wing split-custody crypto for age-plugin-onlykey.
 
 The OnlyKey derives sk_X (X25519) and a 32-byte ML-KEM seed from
-(web-derivation key, label, RPID="onlyagent.app") and keeps sk_X. The host does
+(web-and-agent derivation key, label, RPID="onlyagent.app") and keeps sk_X. The host does
 the ML-KEM half locally: expand the seed, decapsulate ct_M, and run the X-Wing
 combiner. Same derivation + same seed => the SAME X-Wing key on the CLI and the
 web app, so a file encrypted in one decrypts in the other on the same OnlyKey.
@@ -41,7 +41,7 @@ RPID = "onlyagent.app"   # fixed derivation origin shared with the web app
 # ---- derived age identity encoding (label-based, no slot) ----------------
 # Distinguishes a derived identity from a slot identity so age-plugin-onlykey
 # can support BOTH models (like SSH/GPG). A derived identity carries the label;
-# the key is reproduced on demand from (OnlyKey web-derivation key, label, RPID).
+# the key is reproduced on demand from (OnlyKey web-and-agent derivation key, label, RPID).
 #
 # Real bech32 (cli.py's bech32_encode/decode, extracted to bech32.py so both
 # modules can share it without a circular import), matching the slot-based

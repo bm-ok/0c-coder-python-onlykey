@@ -144,7 +144,7 @@ def cmd_generate_derived(label: str):
     """Derive a label-based X-Wing key on OnlyKey; print recipient + identity.
 
     Nothing is stored on the device — the key is reproduced on demand from
-    (web-derivation key, label, RPID="onlyagent.app"), so the SAME OnlyKey and
+    (web-and-agent derivation key, label, RPID="onlyagent.app"), so the SAME OnlyKey and
     label produce the same key in the web app (interoperable age files)."""
     from onlykey.age_plugin.onlykey_hid import OnlyKeyPQ
     from onlykey.age_plugin import derived_xwing as dx
