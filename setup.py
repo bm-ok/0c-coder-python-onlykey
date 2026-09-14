@@ -18,6 +18,18 @@ setup(
     author='CryptoTrust',
     author_email='admin@crp.to',
     license='MIT',
+    # The age plugin uses PEP 604 unions (`Stanza | None`) and PEP 585 generics
+    # (`list[str]`, `tuple[bytes, bytes]`) at module scope, which are syntax
+    # errors at import time on 3.9. Declare the floor so pip refuses to install
+    # an interpreter where `age-plugin-onlykey` cannot start.
+    python_requires='>=3.10',
+    classifiers=[
+        'Programming Language :: Python :: 3',
+        'Programming Language :: Python :: 3.10',
+        'Programming Language :: Python :: 3.11',
+        'Programming Language :: Python :: 3.12',
+        'Programming Language :: Python :: 3.13',
+    ],
     packages=find_packages(exclude=['contrib', 'docs', 'tests']),
     package_data={'onlykey': ['openpgp_bridge/*.js']},
     include_package_data=True,
