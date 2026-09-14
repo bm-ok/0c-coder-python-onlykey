@@ -26,7 +26,7 @@ XWING_CT_SIZE = 1120
 XWING_SS_SIZE = 32
 MLKEM_PK_SIZE = 1184
 MLKEM_CT_SIZE = 1088
-DERIVED_RESP_SIZE = 64   # [pk_X|mlkem_seed] or [ss_X|mlkem_seed]
+DERIVED_LABEL_TAG_SIZE = 32
 
 
 def derived_label_tag(label):
@@ -172,52 +172,72 @@ class OnlyKeyPQ:
             raise RuntimeError(f"X-Wing decaps: got {len(ss)} bytes, expected {XWING_SS_SIZE}")
         return ss
 
-    # ---- Derived (label-based) X-Wing split custody ----------------------
-    # No key is stored; the device derives sk_X + an ML-KEM seed from
-    # (web-derivation key, tag, RPID="onlyagent.app"). sk_X stays on device;
-    # the host does the ML-KEM half (derived_xwing.py). This is the path that
-    # interoperates with the web app: same OnlyKey + same tag => same key.
+    # ---- Derived (label-based) X-Wing ------------------------------------
+    # No key is stored; the device derives the whole X-Wing keypair from
+    # (web-derivation key, tag, RPID="onlyagent.app") on demand and keeps both
+    # halves. This is the path that interoperates with the web app: same
+    # OnlyKey + same tag => same key.
+    #
+    # It used to be split custody - the device returned a 32-byte ML-KEM seed
+    # and the host expanded it, ran ML-KEM decapsulation and combined the
+    # halves. The seed is private key material (it yields sk_M), so a request
+    # for a public key was answered with a private one, and the ML-KEM half of
+    # a hardware key actually lived in this process. Both calls below changed
+    # shape to fix that; derived_xwing.py's split helpers went with it.
 
     def derive_recipient(self, label):
-        """Derived X-Wing recipient over HID. Returns (pk_X(32), mlkem_seed(32)).
+        """Derived X-Wing recipient over HID. Returns the 1216-byte public key.
 
-        Single-report request: the 32-byte tag fits one report. Caller builds
-        the 1216-byte age recipient with derived_xwing.build_recipient().
+        Single-report request - the 32-byte tag fits one report - with a
+        chunked response: XWING_PK_SIZE is pk_M(1184) || pk_X(32), which the
+        firmware stages in large_resp_buffer and serves in pieces.
+
+        This returned [pk_X(32) | mlkem_seed(32)] before, and the caller built
+        the recipient locally. ML-KEM has no short public key - the only
+        32-byte value that reproduces pk_M also reproduces sk_M - so there is
+        no way to send a public key compactly; the public key itself is what
+        crosses the wire.
         """
         tag = derived_label_tag(label)
         resp = self._send_and_receive(
             OKGETPUBKEY, RESERVED_KEY_WEB_DERIVATION, payload=tag,
-            key_type=KEYTYPE_XWING, expected_size=DERIVED_RESP_SIZE,
+            key_type=KEYTYPE_XWING, expected_size=XWING_PK_SIZE,
             timeout_ms=10000,
         )
-        if len(resp) != DERIVED_RESP_SIZE:
+        if len(resp) != XWING_PK_SIZE:
             raise RuntimeError(
-                f"derived recipient: got {len(resp)} bytes, expected {DERIVED_RESP_SIZE}"
+                f"derived recipient: got {len(resp)} bytes, expected {XWING_PK_SIZE}"
             )
-        return resp[:32], resp[32:64]
+        return resp
 
-    def derive_decaps(self, label, ct_x):
-        """Derived X-Wing decaps over HID. Returns (ss_X(32), mlkem_seed(32)).
+    def derive_decaps(self, label, ciphertext):
+        """Derived X-Wing decapsulation over HID. Returns the 32-byte shared secret.
 
-        Sends [tag(32) || ct_X(32)] = 64 B. That exceeds one 57-byte report, so
-        it is streamed with the multi-packet path; the firmware input framing is
-        still being validated on hardware (see okcrypto_xwing_web_derive). The
-        host then finishes the ML-KEM half with derived_xwing.split_decapsulate().
+        Sends [tag(32) || ct(1120)] = 1152 B via the multi-packet path and gets
+        the finished X-Wing shared secret back. The device does both halves.
+
+        Previously this sent [tag(32) || ct_X(32)] and got back
+        [ss_X(32) | mlkem_seed(32)], leaving the ML-KEM half to the host: ct_M
+        never reached the device and the seed always reached the host. Both are
+        reversed now, so the derived path custodies its whole key exactly as
+        the stored path does.
         """
-        if len(ct_x) != 32:
-            raise ValueError(f"ct_X must be 32 bytes, got {len(ct_x)}")
+        if len(ciphertext) != XWING_CT_SIZE:
+            raise ValueError(
+                f"X-Wing ct must be {XWING_CT_SIZE} bytes, got {len(ciphertext)}"
+            )
         tag = derived_label_tag(label)
         print("Press OnlyKey button if prompted...", file=sys.stderr)
         self.ok.send_large_message2(
-            msg=Message(OKDECRYPT), payload=list(tag + bytes(ct_x)),
+            msg=Message(OKDECRYPT), payload=list(tag + bytes(ciphertext)),
             slot_id=RESERVED_KEY_WEB_DERIVATION,
         )
-        resp = self._read_response(expected_size=DERIVED_RESP_SIZE, timeout_ms=30000)
-        if len(resp) != DERIVED_RESP_SIZE:
+        resp = self._read_response(expected_size=XWING_SS_SIZE, timeout_ms=30000)
+        if len(resp) != XWING_SS_SIZE:
             raise RuntimeError(
-                f"derived decaps: got {len(resp)} bytes, expected {DERIVED_RESP_SIZE}"
+                f"derived decaps: got {len(resp)} bytes, expected {XWING_SS_SIZE}"
             )
-        return resp[:32], resp[32:64]
+        return resp
 
     def mlkem_keygen(self, slot=DEFAULT_MLKEM_SLOT):
         """Generate an ML-KEM-768 keypair in the given ECC slot. Returns 1184-byte pubkey."""

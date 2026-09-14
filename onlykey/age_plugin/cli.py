@@ -151,8 +151,7 @@ def cmd_generate_derived(label: str):
 
     print(f"Deriving X-Wing key on OnlyKey (label {label!r})...", file=sys.stderr)
     dev = OnlyKeyPQ()
-    pk_x, seed = dev.derive_recipient(label)
-    recipient = encode_recipient(dx.build_recipient(pk_x, seed))
+    recipient = encode_recipient(dev.derive_recipient(label))
     print(f"# Recipient: {recipient}", file=sys.stderr)
     print(f"# created: {__import__('datetime').datetime.now().isoformat()}")
     print(f"# recipient: {recipient}")
@@ -165,8 +164,7 @@ def cmd_recipient_derived(label: str):
     from onlykey.age_plugin import derived_xwing as dx
 
     dev = OnlyKeyPQ()
-    pk_x, seed = dev.derive_recipient(label)
-    print(encode_recipient(dx.build_recipient(pk_x, seed)))
+    print(encode_recipient(dev.derive_recipient(label)))
 
 
 def cmd_identity_derived(label: str):
@@ -232,24 +230,22 @@ def unwrap_callback(identities, stanzas_per_file):
 
     dev = OnlyKeyPQ()
 
-    # ---- Derived (label-based) identities: split-custody X-Wing ----------
-    # The device returns its X25519 half + ML-KEM seed; the host finishes the
-    # ML-KEM half. Same OnlyKey + same label => the same key as the web app.
+    # ---- Derived (label-based) identities --------------------------------
+    # The device derives the whole X-Wing keypair on demand and decapsulates
+    # both halves itself. Same OnlyKey + same label => the same key as the web
+    # app.
+    #
+    # The recipient lookup that used to happen here has gone with split
+    # custody: it existed only to get pk_X and the ML-KEM seed into
+    # split_decapsulate(), and the device now needs neither from us.
     for label in derived_labels:
-        try:
-            pk_x, mlkem_seed = dev.derive_recipient(label)
-        except Exception as exc:
-            print(f"Could not derive X-Wing key for label {label!r}: {exc}", file=sys.stderr)
-            continue
         for file_idx, stanzas in stanzas_per_file.items():
             for stanza in stanzas:
                 enc = _decode_xwing_stanza(stanza)
                 if enc is None:
                     continue
-                ct_x = enc[XWING_STANZA_ENC_LEN - 32:XWING_STANZA_ENC_LEN]
                 try:
-                    ss_x, _seed = dev.derive_decaps(label, ct_x)
-                    ss = dx.split_decapsulate(ss_x, enc, pk_x, mlkem_seed)
+                    ss = dev.derive_decaps(label, enc)
                     file_key = open_file_key(ss, enc, stanza.body)
                     results.append((file_idx, file_key))
                     break
