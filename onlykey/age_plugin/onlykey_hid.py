@@ -13,6 +13,7 @@ import sys
 import time
 
 from onlykey.client import OnlyKey, Message
+from .protocol import notify
 from . import (
     OKGETPUBKEY, OKDECRYPT, OKSETPRIV, GENERATE_ON_DEVICE,
     DEFAULT_MLKEM_SLOT, DEFAULT_XWING_SLOT,
@@ -27,6 +28,29 @@ XWING_SS_SIZE = 32
 MLKEM_PK_SIZE = 1184
 MLKEM_CT_SIZE = 1088
 DERIVED_LABEL_TAG_SIZE = 32
+
+
+def challenge_code(msg: bytes, duo: bool = False):
+    """The 3-digit confirmation code the device will display for `msg`.
+
+    Mirrors okcore_prime_user_confirmation(): the firmware hashes the primed
+    message and takes bytes 0, 15 and 31 modulo the button count.
+
+        temp   = SHA256(primed_msg)
+        digits = (temp[0] % n) + 1, (temp[15] % n) + 1, (temp[31] % n) + 1
+
+    with n = 6 on a full OnlyKey and 3 on a DUO. For derived decapsulation the
+    primed message is itself SHA256(label_tag || ciphertext), so callers pass
+    the concatenation and this applies both hashes.
+    """
+    primed = hashlib.sha256(msg).digest()
+    temp = hashlib.sha256(primed).digest()
+    n = 3 if duo else 6
+    return tuple((temp[i] % n) + 1 for i in (0, 15, 31))
+
+
+def challenge_code_str(msg: bytes, duo: bool = False) -> str:
+    return " ".join(str(d) for d in challenge_code(msg, duo))
 
 
 def derived_label_tag(label):
@@ -96,16 +120,24 @@ class OnlyKeyPQ:
         while time.time() < deadline:
             try:
                 data = self.ok.read_bytes(64, timeout_ms=2000)
+            except RuntimeError:
+                # A device-reported condition ("Timeout occured while waiting
+                # for confirmation on OnlyKey", "OnlyKey is locked", ...).
+                # read_bytes() raises RuntimeError *only* for these - a plain
+                # read timeout returns an empty list and is handled by the
+                # `if not data` below. So this must propagate: swallowing it
+                # turned "you did not press the button" into a bare
+                # "got 0 bytes, expected N" protocol failure, which is what
+                # it looked like on hardware 2026-09-15 while the firmware
+                # had been answering correctly the whole time.
+                raise
             except Exception:
                 # A single read timing out mid-stream doesn't mean the
                 # device is done sending - keep polling until the real
                 # deadline. Bailing out early here (as soon as `result` was
                 # non-empty) was truncating multi-packet responses like the
                 # 1216-byte X-Wing pubkey whenever one 2s read happened to
-                # time out before the next packet arrived. This only guards
-                # the read() call itself - a real device-reported error
-                # (below) still needs to propagate immediately, not get
-                # silently swallowed by a broad except around both.
+                # time out before the next packet arrived.
                 continue
             if not data:
                 continue
@@ -130,7 +162,7 @@ class OnlyKeyPQ:
         in ``slot`` (not from the packet), waits for a button press, then returns
         the 32-byte shared secret.
         """
-        print("Press OnlyKey button to confirm decryption...", file=sys.stderr)
+        notify("Press OnlyKey button to confirm decryption...")
         self.ok.send_large_message2(
             msg=Message(OKDECRYPT), payload=list(ciphertext), slot_id=slot,
         )
@@ -139,7 +171,7 @@ class OnlyKeyPQ:
     def xwing_keygen(self, slot=DEFAULT_XWING_SLOT):
         """Generate an X-Wing keypair in the given ECC slot. Returns 1216-byte pubkey."""
         slot = validate_ecc_slot(slot)
-        print("Press OnlyKey button to confirm key generation...", file=sys.stderr)
+        notify("Press OnlyKey button to confirm key generation...")
         pk = self._send_and_receive(
             OKSETPRIV, slot,
             payload=GENERATE_ON_DEVICE, key_type=KEYTYPE_XWING,
@@ -227,7 +259,15 @@ class OnlyKeyPQ:
                 f"X-Wing ct must be {XWING_CT_SIZE} bytes, got {len(ciphertext)}"
             )
         tag = derived_label_tag(label)
-        print("Press OnlyKey button if prompted...", file=sys.stderr)
+        # The device gates this per field 30 (web-and-agent derive mode):
+        # 1 = press (default), 0 = type this 3-digit code on the device,
+        # 2 = no prompt. We cannot read the setting back, so show both -
+        # and the code has to be shown, because in challenge mode there is
+        # nothing on the device telling the user what to type.
+        notify(
+            "Confirm on OnlyKey: press any button, or if it is set to "
+            "challenge-code mode enter %s" % challenge_code_str(tag + bytes(ciphertext))
+        )
         self.ok.send_large_message2(
             msg=Message(OKDECRYPT), payload=list(tag + bytes(ciphertext)),
             slot_id=RESERVED_KEY_WEB_DERIVATION,
@@ -242,7 +282,7 @@ class OnlyKeyPQ:
     def mlkem_keygen(self, slot=DEFAULT_MLKEM_SLOT):
         """Generate an ML-KEM-768 keypair in the given ECC slot. Returns 1184-byte pubkey."""
         slot = validate_ecc_slot(slot)
-        print("Press OnlyKey button to confirm key generation...", file=sys.stderr)
+        notify("Press OnlyKey button to confirm key generation...")
         return self._send_and_receive(
             OKSETPRIV, slot,
             payload=GENERATE_ON_DEVICE, key_type=KEYTYPE_MLKEM768,

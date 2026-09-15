@@ -206,6 +206,13 @@ class MessageField(Enum):
     SSHCHALENGEMODE = 21
     BACKUPMODE = 20
     TOUCHSENSE = 28
+    # User input mode for the web-and-agent derivation slot (128), on BOTH
+    # transports (FIDO2 DERIVE_* and raw HID): 0 challenge, 1 press, 2 none.
+    WEBAGENTDERIVEMODE = 30
+    # Webcrypt policy bitfield: bit 0 allow stored-key PGP over FIDO2,
+    # bit 1 disable the FIDO2 extension entirely. Undefined bits are refused
+    # by the firmware rather than masked.
+    WEBCRYPTPOLICY = 31
 
 class KeyTypeEnum(Enum):
     ED22519 = 1
