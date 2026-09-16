@@ -627,6 +627,17 @@ def cli():
              only_key.setslot(1, MessageField.PGPCHALENGEMODE, int(sys.argv[2]))
         elif sys.argv[1] == 'derivedkeymode':
              only_key.setslot(1, MessageField.SSHCHALENGEMODE, int(sys.argv[2]))
+        elif sys.argv[1] in ('webagentderivemode', 'webderivemode'):
+             # Field 30. Governs slot 128 on both transports, so it covers the
+             # web app and a local agent over HID alike.
+             # 0 = challenge code, 1 = button press (default), 2 = no press.
+             only_key.setslot(1, MessageField.WEBAGENTDERIVEMODE, int(sys.argv[2]))
+        elif sys.argv[1] == 'webcryptpolicy':
+             # Field 31 bitfield: 0 = defaults (derived keys yes, PGP no,
+             # extension on), 1 = also allow stored-key PGP over FIDO2,
+             # 2 = disable the FIDO2 extension entirely, 3 = both bits.
+             # The firmware refuses undefined bits rather than masking them.
+             only_key.setslot(1, MessageField.WEBCRYPTPOLICY, int(sys.argv[2]))
         elif sys.argv[1] == 'backupkeymode':
              only_key.setslot(1, MessageField.BACKUPMODE, int(sys.argv[2]))
         elif sys.argv[1] == 'keylayout':
@@ -1249,6 +1260,16 @@ def cli():
             elif data[0] == 'touchsense':
                 try:
                     only_key.setslot(1, MessageField.TOUCHSENSE, int(data[1]))
+                except:
+                    continue
+            elif data[0] in ('webagentderivemode', 'webderivemode'):
+                try:
+                    only_key.setslot(1, MessageField.WEBAGENTDERIVEMODE, int(data[1]))
+                except:
+                    continue
+            elif data[0] == 'webcryptpolicy':
+                try:
+                    only_key.setslot(1, MessageField.WEBCRYPTPOLICY, int(data[1]))
                 except:
                     continue
             elif data[0] == 'storedkeymode':

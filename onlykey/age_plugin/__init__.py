@@ -24,7 +24,7 @@ OKSETPRIV = 239     # Message.OKSETPRIV — also generates an on-device key when
 # slot, and the algorithm is chosen by the key-type byte (buffer[6]) below —
 # not by the slot number. The slot is therefore caller-selectable, but only
 # across the USER key slots: firmware exposes 101-116 (16 slots) for user keys.
-# Slots 117-132 are RESERVED (e.g. 128 web-derivation, 129/130 HMAC, 131
+# Slots 117-132 are RESERVED (e.g. 128 web-and-agent derivation, 129/130 HMAC, 131
 # backup, 132 derivation) and must never be used for PQ keys — writing there
 # would clobber internal device keys. Firmware getpubkey/decaps enforce this
 # with a `< 117` gate (okcrypto.cpp); the host mirrors it here.
@@ -51,9 +51,9 @@ def validate_ecc_slot(slot):
 KEYTYPE_MLKEM768 = 5
 KEYTYPE_XWING = 6
 
-# Reserved web-derivation key slot (okcore.h RESERVED_KEY_WEB_DERIVATION). Used
+# Reserved web-and-agent derivation key slot (okcore.h RESERVED_KEY_WEB_DERIVATION). Used
 # for DERIVED (label-based) X-Wing: the device derives sk_X + an ML-KEM seed from
-# (web-derivation key, 32-byte label tag, RPID="onlyagent.app") and never stores
+# (web-and-agent derivation key, 32-byte label tag, RPID="onlyagent.app") and never stores
 # a key. This is the split-custody path that interoperates with the web app.
 RESERVED_KEY_WEB_DERIVATION = 128
 
