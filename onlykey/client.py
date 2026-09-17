@@ -561,30 +561,49 @@ class OnlyKey(object):
         elif key_features == 'b':
             key_type = int(key_type) + 32 # Decrypt flag
             key_type = int(key_type) + 128 # Backup flag
-        else:
+        elif not key_features:
             key_type = int(key_type)
+        else:
+            # Anything unrecognised used to fall through to the bare type with
+            # the flags silently dropped, so a typo produced a key the device
+            # would not use for the operation it was loaded for - and, because
+            # the bare type is below 16, it also produced the odd-length
+            # payload described below. Fail here instead of on the wire.
+            raise ValueError(
+                "key_features must be '' or one of 'd' (decrypt), "
+                "'s' (sign), 'b' (backup); got %r" % (key_features,))
+        # The key type goes on the wire as ONE byte, and send_message() runs
+        # the payload through bytearray.fromhex(), so it has to be two hex
+        # digits. format(key_type, 'x') emitted a single nibble for anything
+        # below 16 - which is every type that carries no feature flag, the
+        # loadkey() default among them - so the whole payload came out
+        # odd-length and raised
+        #
+        #     non-hexadecimal number found in fromhex() arg at position N
+        #
+        # before a byte reached the device. Hence '02x' below.
         logging.debug('SETTING KEY IN SLOT:', slot_number)
         logging.debug('TO TYPE:', key_type)
         logging.debug('KEY:', value)
         if slot_number >= 1 and slot_number <= 4:
             if key_type & 0xf == 2: # RSA 2048
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[:114])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[114:228])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[228:342])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[342:456])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[456:512])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[:114])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[114:228])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[228:342])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[342:456])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[456:512])
             elif key_type & 0xf == 4: # RSA 4096
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[:114])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[114:228])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[228:342])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[342:456])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[456:570])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[570:684])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[684:798])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[798:912])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[912:1024])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[:114])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[114:228])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[228:342])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[342:456])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[456:570])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[570:684])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[684:798])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[798:912])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[912:1024])
         else:
-            self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value)
+            self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value)
         time.sleep(1)
         print(self.read_string())
 
@@ -873,7 +892,7 @@ class OnlyKey(object):
 
         print('Setting backup passphrase...')
         self.send_message(msg=Message.OKSETPRIV, slot_id=slot,
-                         payload=format(key_type, 'x') + hex_key)
+                         payload=format(key_type, '02x') + hex_key)
         time.sleep(1)
         print(self.read_string())
 
