@@ -539,7 +539,36 @@ class OnlyKey(object):
         # slot 131-132 Reserved
         # slot 129-130 HMAC Keys
         # slot 101-116 ECC Keys
-        # slot 1-4 RSA Keys
+        # slot 1-4 RSA Keys (also composite PQC PGP keys - see 'p' below)
+        #
+        # 'p' is a composite PQC PGP key and takes a different road out of this
+        # function. It lives in an RSA slot, but its 160-byte seed blob is
+        # chunked 57/57/46 with a fixed type byte rather than sliced into the
+        # 114-char pieces the RSA branches below use, and - unlike everything
+        # else here - the device's acknowledgement is READ rather than printed.
+        # That matters: OKSETPRIV is refused outside config mode, and a
+        # composite key cannot be read back afterwards (okcrypto_getpubkey()
+        # has no KEYTYPE_PQC_PGP branch), so an unchecked reply means a stored
+        # key and an empty slot look identical. load_composite_key() raises
+        # instead.
+        if key_type == 'p':
+            from . import pqc
+            if key_features:
+                raise ValueError(
+                    "composite PQC PGP keys take no feature letter - they are "
+                    "always decrypt and sign (type byte 0x%02x), fixed by what "
+                    "the algorithm is. Use: setkey PQC<1-4> p <%d hex chars>"
+                    % (pqc.PQC_KEY_TYPE_BYTE, pqc.PQC_PGP_BLOB_LEN * 2))
+            try:
+                blob = bytes.fromhex(value.strip())
+            except ValueError:
+                raise ValueError(
+                    "composite PQC PGP key must be %d hex characters "
+                    "(a %d-byte seed blob)"
+                    % (pqc.PQC_PGP_BLOB_LEN * 2, pqc.PQC_PGP_BLOB_LEN))
+            # Slot range and blob length are checked inside.
+            pqc.load_composite_key(self, slot_number, blob)
+            return
         # set key type
         if key_type == 'x':
             key_type = '1'

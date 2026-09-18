@@ -379,6 +379,7 @@ def cli():
         elif sys.argv[1] == 'setkey' or sys.argv[1] == 'genkey':
             try:
                 slot_id = 0
+                pqc_slot = False
                 if sys.argv[2] == 'RSA1':
                     slot_id = 1
                 elif sys.argv[2] == 'RSA2':
@@ -387,6 +388,18 @@ def cli():
                     slot_id = 3
                 elif sys.argv[2] == 'RSA4':
                     slot_id = 4
+                elif sys.argv[2] == 'PQC1':
+                    slot_id = 1
+                    pqc_slot = True
+                elif sys.argv[2] == 'PQC2':
+                    slot_id = 2
+                    pqc_slot = True
+                elif sys.argv[2] == 'PQC3':
+                    slot_id = 3
+                    pqc_slot = True
+                elif sys.argv[2] == 'PQC4':
+                    slot_id = 4
+                    pqc_slot = True
                 elif sys.argv[2] == 'ECC1':
                     slot_id = 101
                 elif sys.argv[2] == 'ECC2':
@@ -423,11 +436,36 @@ def cli():
                     slot_id = 130
                 elif sys.argv[2] == 'HMAC2':
                     slot_id = 129
+                # PQC1-PQC4 name the same physical slots as RSA1-RSA4; the name
+                # says which kind of key is going in, and these two checks keep
+                # the name and the type honest in both directions. Without them
+                # the pair is decorative: `setkey PQC1 n d <rsa>` would load an
+                # RSA key into a slot the user called PQC.
+                if pqc_slot and sys.argv[3] != 'p':
+                    print("PQC%d holds a composite PQC PGP key: setkey PQC%d p <320 hex chars>."
+                          % (slot_id, slot_id))
+                    print("For an RSA key in that slot, name it RSA%d." % slot_id)
+                    return
+                if sys.argv[3] == 'p' and not pqc_slot:
+                    print("A composite PQC PGP key goes in a PQC slot: setkey PQC1-PQC4 p <320 hex chars>.")
+                    return
                 if (sys.argv[1]=='genkey'):
                     if (slot_id > 100 and (sys.argv[3] in ('x', 'n', 's', 'm', 'w'))):
                         only_key.setkey(slot_id, sys.argv[3], sys.argv[4], 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
                     else:
+                        # No composite entry here on purpose. genkey sends the
+                        # all-FFs trigger, and okcrypto_generate_random_key()
+                        # is gated on `buffer[5] > 100` - ECC slots only - so a
+                        # composite key cannot be generated on the device at
+                        # all. It is made off-device and loaded.
                         print('Input error. See available commands with examples here https://docs.crp.to/command-line.html')
+                elif (sys.argv[3] == 'p'):
+                    # setkey PQC<1-4> p <320 hex chars>
+                    #
+                    # Three arguments, not four: a composite key is always
+                    # decrypt AND sign, so there is no feature letter to pick.
+                    # client.py's setkey() rejects one rather than ignoring it.
+                    only_key.setkey(slot_id, 'p', '', sys.argv[4])
                 elif (sys.argv[3]=='label'):
                     if slot_id > 100:
                         slot_id = slot_id - 72
@@ -551,6 +589,14 @@ def cli():
                 elif sys.argv[2] == 'RSA3':
                     slot_id = 3
                 elif sys.argv[2] == 'RSA4':
+                    slot_id = 4
+                elif sys.argv[2] == 'PQC1':
+                    slot_id = 1
+                elif sys.argv[2] == 'PQC2':
+                    slot_id = 2
+                elif sys.argv[2] == 'PQC3':
+                    slot_id = 3
+                elif sys.argv[2] == 'PQC4':
                     slot_id = 4
                 elif sys.argv[2] == 'ECC1':
                     slot_id = 101
@@ -1106,6 +1152,14 @@ def cli():
                         slot_id = 3
                     elif data[1] == 'RSA4':
                         slot_id = 4
+                    elif data[1] == 'PQC1':
+                        slot_id = 1
+                    elif data[1] == 'PQC2':
+                        slot_id = 2
+                    elif data[1] == 'PQC3':
+                        slot_id = 3
+                    elif data[1] == 'PQC4':
+                        slot_id = 4
                     elif data[1] == 'ECC1':
                         slot_id = 101
                     elif data[1] == 'ECC2':
@@ -1152,6 +1206,14 @@ def cli():
                             only_key.setkey(slot_id, data[2], data[3], 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff')
                         else:
                             print('Input error. See available commands with examples here https://docs.crp.to/command-line.html')
+                    elif (data[2] == 'p'):
+                        # setkey PQC<1-4> p   - the blob is prompted for, the
+                        # same way RSA and ECC key material is here, so 320 hex
+                        # characters of private key never land in shell history.
+                        if not 1 <= slot_id <= 4:
+                            print('A composite PQC PGP key goes in PQC1-PQC4.')
+                            continue
+                        only_key.setkey(slot_id, 'p', '', prompt_pass())
                     elif (data[2]=='label'):
                         if slot_id > 100:
                             slot_id = slot_id - 72
@@ -1174,6 +1236,14 @@ def cli():
                     elif data[1] == 'RSA3':
                         slot_id = 3
                     elif data[1] == 'RSA4':
+                        slot_id = 4
+                    elif data[1] == 'PQC1':
+                        slot_id = 1
+                    elif data[1] == 'PQC2':
+                        slot_id = 2
+                    elif data[1] == 'PQC3':
+                        slot_id = 3
+                    elif data[1] == 'PQC4':
                         slot_id = 4
                     elif data[1] == 'ECC1':
                         slot_id = 101
