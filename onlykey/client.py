@@ -602,6 +602,23 @@ class OnlyKey(object):
                 self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[684:798])
                 self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[798:912])
                 self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[912:1024])
+            else:
+                # The `else` below belongs to the SLOT test, not to these two
+                # branches, so an RSA slot carrying any other key type used to
+                # fall out of setkey() having sent NOTHING - and then sleep a
+                # second and print the device's empty read, which looks exactly
+                # like a quiet success. `setkey RSA1 7 d <blob>` reported
+                # nothing wrong and loaded nothing.
+                #
+                # RSA slots take 2048 and 4096 here and nothing else. A
+                # composite PQC key also lives in an RSA slot, but its 160-byte
+                # blob is chunked by pqc.load_composite_key() rather than by
+                # this function, and `loadpqc` is the only way in.
+                raise ValueError(
+                    "RSA slots take key type 2 (RSA-2048) or 4 (RSA-4096); "
+                    "got %d. A composite PQC PGP key loads with "
+                    "`onlykey-cli loadpqc <keyfile> RSA%d`."
+                    % (key_type & 0xf, slot_number))
         else:
             self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value)
         time.sleep(1)
