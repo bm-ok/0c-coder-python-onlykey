@@ -33,11 +33,14 @@ only_key = OnlyKey()
 def _pqc_input_bytes(arg):
     """Read a PQC operand given as a hex string or as a path to a file.
 
-    Same two-shapes rule `setpqc` already applies to its blob: a file is tried
-    as hex text first and taken as raw bytes if that fails, so both a
-    `.hex`-style dump and a raw binary file work. Accepting a path matters here
-    because an ML-KEM ciphertext is 1088 bytes - 2176 hex characters - which is
-    past what several shells will take as one argument.
+    A file is tried as hex text first and taken as raw bytes if that fails, so
+    both a `.hex`-style dump and a raw binary file work. Accepting a path
+    matters here because an ML-KEM ciphertext is 1088 bytes - 2176 hex
+    characters - which is past what several shells will take as one argument.
+
+    This is for CIPHERTEXT and digest operands (signpqc, decryptpqc), which are
+    public data. Key material has no equivalent: loadpqc takes an armored key
+    file and nothing else.
     """
     if os.path.isfile(arg):
         raw = open(arg, 'rb').read()
@@ -437,42 +440,15 @@ def cli():
                 print(sys.exc_info()[0])
                 print('Input error. See available commands with examples here https://docs.crp.to/command-line.html')
                 return
-        elif sys.argv[1] == 'setpqc':
-            # Load a composite PQC PGP key (IETF OpenPGP-PQC) into an RSA slot.
-            # setpqc [RSA1-RSA4] [160-byte hex blob | path to .hex/.bin file]
-            # blob layout (see onlykey/pqc.py): Ed25519(32)|ML-DSA seed(32)|X25519(32)|ML-KEM seed(64)
-            try:
-                from . import pqc
-                slotmap = {'RSA1': 1, 'RSA2': 2, 'RSA3': 3, 'RSA4': 4}
-                slot_id = slotmap.get(sys.argv[2])
-                if not slot_id:
-                    print('setpqc [RSA1-RSA4] [160-byte hex blob | file]')
-                    sys.exit(1)
-                arg = sys.argv[3]
-                if os.path.isfile(arg):
-                    raw = open(arg, 'rb').read()
-                    try:
-                        blob = bytes.fromhex(raw.decode().strip())
-                    except Exception:
-                        blob = raw
-                else:
-                    blob = bytes.fromhex(arg.strip())
-                # Raises if the device refused the load, so the success line
-                # below is only ever printed for a load that happened. There is
-                # no readback for a composite key - okcrypto_getpubkey() has no
-                # KEYTYPE_PQC_PGP branch - so the device's own acknowledgement
-                # is the only thing that distinguishes a stored key from an
-                # empty slot.
-                pqc.load_composite_key(only_key, slot_id, blob)
-                print('Loaded composite PQC PGP key (%d bytes) into %s' % (len(blob), sys.argv[2]))
-            except Exception:
-                print(sys.exc_info()[1])
-                print('setpqc [RSA1-RSA4] [160-byte hex blob | file]')
-                sys.exit(1)
         elif sys.argv[1] == 'loadpqc':
-            # Parse a composite PQC PGP private key FILE (via the OpenPGP.js bridge)
-            # and load its 160-byte seed blob into an RSA slot. Needs Node.js.
+            # Load a composite PQC PGP key (IETF OpenPGP-PQC) into an RSA slot.
             # loadpqc <keyfile.asc> [RSA1-RSA4] [passphrase]
+            #
+            # Parses an armored composite private key through the OpenPGP.js
+            # bridge (needs Node.js) and sends the 160-byte seed blob. This is
+            # the only way a composite key reaches the device: the firmware has
+            # no keygen trigger in the RSA slot path, and OKSETPRIV is not
+            # reachable over the browser's FIDO2 transport at all.
             try:
                 from . import pqc, pgp_bridge
                 keyfile = sys.argv[2]
@@ -483,6 +459,12 @@ def cli():
                     sys.exit(1)
                 passphrase = sys.argv[4] if len(sys.argv) > 4 else None
                 blob = pgp_bridge.composite_blob(path=keyfile, passphrase=passphrase)
+                # Raises if the device refused the load, so the success line
+                # below is only ever printed for a load that happened. There is
+                # no readback for a composite key - okcrypto_getpubkey() has no
+                # KEYTYPE_PQC_PGP branch - so the device's own acknowledgement
+                # is the only thing that distinguishes a stored key from an
+                # empty slot.
                 pqc.load_composite_key(only_key, slot_id, blob)
                 print('Loaded composite PQC PGP key from %s (%d bytes) into RSA%d'
                       % (keyfile, len(blob), slot_id))
