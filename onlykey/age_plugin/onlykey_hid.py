@@ -13,6 +13,13 @@ import sys
 import time
 
 from onlykey.client import OnlyKey, Message
+# The challenge rule and the error classifier come from the generated
+# protocol module - one source for host and firmware. derived_recipient_payload
+# and derived_decaps_payload are NOT imported: they frame the host-split
+# X-Wing exchange, and this plugin uses the device-custody one (see
+# derive_recipient below), so importing them would be dead weight that reads
+# like the two designs are both live.
+from onlykey.protocol import challenge_code_str, classify_response
 from .protocol import notify
 from . import (
     OKGETPUBKEY, OKDECRYPT, OKSETPRIV, GENERATE_ON_DEVICE,
@@ -141,8 +148,8 @@ class OnlyKeyPQ:
                 continue
             if not data:
                 continue
-            text = bytes(data).decode("ascii", errors="ignore")
-            if text.startswith("Error"):
+            kind, text = classify_response(data)
+            if kind == "error":
                 raise RuntimeError(f"OnlyKey: {text.strip()}")
             result.extend(data)
             if expected_size and len(result) >= expected_size:

@@ -3,6 +3,7 @@
 Implements both recipient-v1 (encrypt) and identity-v1 (decrypt) state machines.
 """
 
+from __future__ import annotations
 import sys
 import base64
 import io
