@@ -10,6 +10,7 @@ import binascii
 import hashlib
 import os
 import codecs
+from enum import IntEnum
 
 try:
     # Prefer the hidraw-backed module on Linux to avoid hid "open failed" races
@@ -175,7 +176,15 @@ from .protocol import (Message, MessageField, KeyType, KeyType as KeyTypeEnum,
 #   bit 0  allow stored-key PGP over FIDO2 (OKWC_ALLOW_STORED_KEY)
 #   bit 1  disable the FIDO2 extension entirely
 # Undefined bits are refused by the firmware rather than masked.
-WEBCRYPTPOLICY_FIELD = 31
+class _ExtraMessageField(IntEnum):
+    """Fields not in the generated MessageField yet. setslot() hands this to
+    send_message(), which reads .name for the debug log and .value for the
+    wire, so a bare int is NOT interchangeable with a MessageField member -
+    it raises AttributeError: 'int' object has no attribute 'name'."""
+    WEBCRYPTPOLICY = 31
+
+
+WEBCRYPTPOLICY_FIELD = _ExtraMessageField.WEBCRYPTPOLICY
 class OnlyKeyUnavailableException(Exception):
     """Exception raised when the connection to the OnlyKey failed."""
     pass
@@ -568,8 +577,15 @@ class OnlyKey(object):
                     "composite PQC PGP key must be %d hex characters "
                     "(a %d-byte seed blob)"
                     % (pqc.PQC_PGP_BLOB_LEN * 2, pqc.PQC_PGP_BLOB_LEN))
-            # Slot range and blob length are checked inside.
+            # Slot range and blob length are checked inside, and the device's
+            # acknowledgement is read there - so reaching the next line means
+            # the load happened. Say so: this branch returns before setkey()'s
+            # own print(self.read_string()) at the bottom, so without this a
+            # successful load produced NO OUTPUT AT ALL, which is exactly the
+            # silent-success shape this file has been fixing elsewhere.
             pqc.load_composite_key(self, slot_number, blob)
+            print('Loaded composite PQC PGP key (%d bytes) into PQC%d'
+                  % (len(blob), slot_number))
             return
         # set key type + features from the shared CLI letter tables
         # (setkey <slot> <x|n|s|c|m|w|h> <d|s|b> <hex>); a numeric key_type is
