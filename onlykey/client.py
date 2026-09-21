@@ -481,6 +481,13 @@ class OnlyKey(object):
         slots = []
         for _ in range(24):
             data = self.read_string().split('|')
+            # A device with fewer labels than the loop count stops answering,
+            # and read_string() returns ''. ord('') is a TypeError, so the
+            # command died rather than finishing with the labels it had:
+            #   TypeError: ord() expected a character, but string of length 0
+            # Nothing here needs all 24 - the loop is an upper bound.
+            if not data[0]:
+                break
             slot_number = ord(data[0])
             if slot_number >= 16:
                 slot_number = slot_number - 6
@@ -498,6 +505,8 @@ class OnlyKey(object):
         slots = []
         for _ in range(20):
             data = self.read_string().split('|')
+            if not data[0]:   # see getduolabels() above - same empty-read guard
+                break
             slot_number = ord(data[0])
             if 25 <= slot_number <= 44:
                 slots.append(Slot(slot_number, label=data[1]))
