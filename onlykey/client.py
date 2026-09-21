@@ -164,7 +164,8 @@ from .protocol import (Message, MessageField, KeyType, KeyType as KeyTypeEnum,
                        KeyFeature, UserInputMode, ReservedSlot, CLI_KEY_LETTERS,
                        CLI_KEY_FEATURES, key_type_byte, challenge_code,
                        challenge_code_str, classify_response, is_error,
-                       parse_capabilities, CAPABILITIES_SELECTOR, CapabilityFlag)
+                       parse_capabilities, CAPABILITIES_SELECTOR, CapabilityFlag,
+                       KnownResponse)
 
 
 # Field 31 (webcrypt policy) is NOT in the generated MessageField yet: the
@@ -381,8 +382,18 @@ class OnlyKey(object):
             raise RuntimeError('No PIN set, You must set a PIN first')
         elif outstr.decode(errors="ignore").find("INITIALIZED") != -1:
             raise RuntimeError('OnlyKey is locked, enter PIN to unlock')
-        elif outstr.decode(errors="ignore").find("Error incorrect challenge was entered") != -1:
-            raise RuntimeError('Error incorrect challenge was entered')
+        elif outstr.decode(errors="ignore").find(KnownResponse.WRONG_CHALLENGE.value) != -1:
+            raise RuntimeError(KnownResponse.WRONG_CHALLENGE.value)
+        # The device used to call all three of these a wrong challenge. A late
+        # press and a press-mode rejection are now named separately, and they
+        # are not the same advice: one means press sooner, one means the key
+        # did not take the press at all, and only the first means the digits
+        # were wrong. Raised verbatim, like every other line here, so the
+        # device's own words reach the caller.
+        elif outstr.decode(errors="ignore").find(KnownResponse.CONFIRMATION_WINDOW_CLOSED.value) != -1:
+            raise RuntimeError(KnownResponse.CONFIRMATION_WINDOW_CLOSED.value)
+        elif outstr.decode(errors="ignore").find(KnownResponse.PRESS_NOT_ACCEPTED.value) != -1:
+            raise RuntimeError(KnownResponse.PRESS_NOT_ACCEPTED.value)
         elif outstr.decode(errors="ignore").find("No PIN set, You must set a PIN first") != -1:
             raise RuntimeError('Error OnlyKey must be configured first')
         elif outstr.decode(errors="ignore").find("Timeout occured while waiting for confirmation on OnlyKey") != -1:

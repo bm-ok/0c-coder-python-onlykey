@@ -276,6 +276,8 @@ class KnownResponse(str, Enum):
     CONFIG_MODE_NOT_SUPPORTED = 'ERROR NOT SUPPORTED IN CONFIG MODE'
     DEVICE_LOCKED = 'Error device locked'
     WRONG_CHALLENGE = 'Error incorrect challenge was entered'
+    CONFIRMATION_WINDOW_CLOSED = 'Error confirmation window closed before the button was pressed'
+    PRESS_NOT_ACCEPTED = 'Error button press was not accepted'
     CONFIRMATION_TIMEOUT = 'Timeout occured while waiting for confirmation on OnlyKey'
     NO_KEY_IN_SLOT = 'Error no key set in this slot'
     INVALID_USER_INPUT_MODE = 'Error invalid user input mode'
