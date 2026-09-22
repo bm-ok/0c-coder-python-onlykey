@@ -27,7 +27,61 @@ import nacl.signing
 
 from .client import OnlyKey, Message, MessageField, WEBCRYPTPOLICY_FIELD
 
-only_key = OnlyKey()
+
+def _cli_version():
+    """The installed package version - the one number setup.py declares.
+
+    The CLI used to print a hard-coded 'v1.2.10' in three places while setup.py
+    said 1.2.11, so `onlykey-cli version` reported a release that was not the
+    one installed. Reading the distribution metadata makes setup.py the only
+    place the number lives.
+    """
+    try:
+        from importlib.metadata import version, PackageNotFoundError
+    except ImportError:  # pragma: no cover - python_requires is >= 3.10
+        return 'unknown'
+    try:
+        return version('onlykey')
+    except PackageNotFoundError:
+        return 'unknown (not installed as a package)'
+
+
+class _LazyOnlyKey(object):
+    """Connect on first use, not at import.
+
+    `only_key = OnlyKey()` ran at module import, so EVERY invocation - including
+    `onlykey-cli version`, `help` and `-h`, which never talk to a key - opened
+    the device first: a key on the bus saw traffic it did not ask for, and a
+    missing key made `version` fail. The proxy defers the connection to the
+    first attribute a command actually uses, so the commands that need no
+    device never touch one.
+    """
+
+    def __init__(self):
+        object.__setattr__(self, '_ok', None)
+
+    def _get(self):
+        ok = object.__getattribute__(self, '_ok')
+        if ok is None:
+            ok = OnlyKey()
+            object.__setattr__(self, '_ok', ok)
+        return ok
+
+    def __getattr__(self, name):
+        return getattr(self._get(), name)
+
+    def close_if_open(self):
+        """Close the HID handle if a command opened one - and never open one to
+        close it, which is what the exit handler did through the proxy."""
+        ok = object.__getattribute__(self, '_ok')
+        if ok is not None:
+            ok._hid.close()
+
+    def __setattr__(self, name, value):
+        setattr(self._get(), name, value)
+
+
+only_key = _LazyOnlyKey()
 
 
 def _pqc_input_bytes(arg):
@@ -782,7 +836,7 @@ def cli():
                 print('Error loading firmware: {}'.format(str(e)))
                 return
         elif sys.argv[1] == 'version':
-            print('OnlyKey CLI v1.2.10')
+            print('OnlyKey CLI v' + _cli_version())
         elif sys.argv[1] == 'capabilities':
             only_key.displaycapabilities()
         elif sys.argv[1] == 'fwversion':
@@ -861,7 +915,7 @@ def cli():
     else:
 
         # Print help.
-        print('OnlyKey CLI v1.2.10')
+        print('OnlyKey CLI v' + _cli_version())
         print('Control-D to exit.')
         print()
 
@@ -1468,7 +1522,7 @@ def cli():
                     continue
             elif data[0] == 'version':
                 try:
-                    print('OnlyKey CLI v1.2.10')
+                    print('OnlyKey CLI v' + _cli_version())
                 except:
                     continue
             elif data[0] == 'capabilities':
@@ -1595,10 +1649,10 @@ def main():
         atexit.register(exit_handler)
         cli()
     except EOFError:
-        only_key._hid.close()
+        only_key.close_if_open()
         print()
         print('Bye!')
         pass
 
 def exit_handler():
-    only_key._hid.close()
+    only_key.close_if_open()

@@ -215,7 +215,7 @@ class OnlyKeyPQ:
 
     # ---- Derived (label-based) X-Wing ------------------------------------
     # No key is stored; the device derives the whole X-Wing keypair from
-    # (web-and-agent derivation key, tag, RPID="onlyagent.app") on demand and keeps both
+    # (web-and-agent derivation key, tag) on demand and keeps both
     # halves. This is the path that interoperates with the web app: same
     # OnlyKey + same tag => same key.
     #
