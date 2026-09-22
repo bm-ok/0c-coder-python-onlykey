@@ -526,10 +526,19 @@ def cli():
                     only_key.setslot(slot_id, MessageField.LABEL, sys.argv[4])
                 else:
                     only_key.setkey(slot_id, sys.argv[3], sys.argv[4], sys.argv[5])
-            except:
-                print(sys.exc_info()[0])
-                print('Input error. See available commands with examples here https://docs.crp.to/command-line.html')
-                return
+            except Exception as e:
+                # A refused composite load raises with the device's own words
+                # ("OnlyKey refused the key load: Error not in config mode").
+                # This printed only the exception CLASS and exited 0, so the
+                # reason was lost and a script could not tell a refusal from a
+                # load. setpqc had the same shape and was fixed; setkey p is
+                # its replacement and must not regress it.
+                if str(e) and not isinstance(e, (IndexError, KeyError)):
+                    print(str(e))
+                else:
+                    print(sys.exc_info()[0])
+                    print('Input error. See available commands with examples here https://docs.crp.to/command-line.html')
+                sys.exit(1)
         elif sys.argv[1] == 'loadpqc':
             # Load a composite PQC PGP key (IETF OpenPGP-PQC) into an RSA slot.
             # loadpqc <keyfile.asc> [PQC1-PQC4] [passphrase]
