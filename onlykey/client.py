@@ -10,6 +10,7 @@ import binascii
 import hashlib
 import os
 import codecs
+from enum import IntEnum
 
 try:
     # Prefer the hidraw-backed module on Linux to avoid hid "open failed" races
@@ -156,72 +157,35 @@ SLOTS_NAME_DUO= {
 }
 
 
-class Message(Enum):
-    OKSETPIN = 225  # 0xE1
-    OKSETSDPIN = 226  # 0xE2
-    OKSETPDPIN = 227  # 0xE3
-    OKSETTIME = 228  # 0xE4
-    OKGETLABELS = 229  # 0xE5
-    OKSETSLOT = 230  # 0xE6
-    OKWIPESLOT = 231  # 0xE7
-    OKSETU2FPRIV = 232  # 0xE8
-    OKWIPEU2FPRIV = 233  # 0xE9
-    OKSETU2FCERT = 234  # 0xEA
-    OKWIPEU2FCERT = 235  # 0xEB
-    OKGETPUBKEY = 236
-    OKSIGN = 237
-    OKWIPEPRIV = 238
-    OKSETPRIV = 239
-    OKDECRYPT = 240
-    OKRESTORE = 241
-    OKFWUPDATE = 244  # 0xF4
+# Message ids, setslot field ids and key types come from the generated protocol
+# module (libraries/onlykey/protocol/onlykey-protocol.json -> onlykey/protocol.py).
+# KeyTypeEnum is kept as a name for callers that imported it from here.
+from .protocol import (Message, MessageField, KeyType, KeyType as KeyTypeEnum,
+                       KeyFeature, UserInputMode, ReservedSlot, CLI_KEY_LETTERS,
+                       CLI_KEY_FEATURES, key_type_byte, challenge_code,
+                       challenge_code_str, classify_response, is_error,
+                       parse_capabilities, CAPABILITIES_SELECTOR, CapabilityFlag,
+                       KnownResponse)
 
 
-class MessageField(Enum):
-    LABEL = 1
-    URL = 15
-    DELAY1 = 17
-    NEXTKEY4 = 18
-    USERNAME = 2
-    NEXTKEY1 = 16
-    NEXTKEY2 = 3
-    DELAY2 = 4
-    PASSWORD = 5
-    NEXTKEY3 = 6
-    DELAY3 = 7
-    NEXTKEY5 = 19
-    TFATYPE = 8
-    TOTPKEY = 9
-    YUBIAUTH = 10
-    IDLETIMEOUT = 11
-    WIPEMODE = 12
-    KEYTYPESPEED = 13
-    KEYLAYOUT = 14
-    LEDBRIGHTNESS = 24
-    LOCKBUTTON = 25
-    HMACMODE = 26
-    SYSADMINMODE = 27
-    SECPROFILEMODE = 23
-    PGPCHALENGEMODE = 22
-    SSHCHALENGEMODE = 21
-    BACKUPMODE = 20
-    TOUCHSENSE = 28
-    # User input mode for the web-and-agent derivation slot (128), on BOTH
-    # transports (FIDO2 DERIVE_* and raw HID): 0 challenge, 1 press, 2 none.
-    WEBAGENTDERIVEMODE = 30
-    # Webcrypt policy bitfield: bit 0 allow stored-key PGP over FIDO2,
-    # bit 1 disable the FIDO2 extension entirely. Undefined bits are refused
-    # by the firmware rather than masked.
+# Field 31 (webcrypt policy) is NOT in the generated MessageField yet: the
+# protocol JSON and its generator live on libraries:feat/user-input-modes,
+# which is not the libraries branch currently checked out, so protocol.py
+# stops at WEBDERIVEMODE = 30. Declared here so `onlykey-cli webcryptpolicy`
+# keeps working, and marked so it is folded into the JSON and deleted from
+# here the moment the protocol source and this tree are on the same branch.
+#   bit 0  allow stored-key PGP over FIDO2 (OKWC_ALLOW_STORED_KEY)
+#   bit 1  disable the FIDO2 extension entirely
+# Undefined bits are refused by the firmware rather than masked.
+class _ExtraMessageField(IntEnum):
+    """Fields not in the generated MessageField yet. setslot() hands this to
+    send_message(), which reads .name for the debug log and .value for the
+    wire, so a bare int is NOT interchangeable with a MessageField member -
+    it raises AttributeError: 'int' object has no attribute 'name'."""
     WEBCRYPTPOLICY = 31
 
-class KeyTypeEnum(Enum):
-    ED22519 = 1
-    P256 = 2
-    SECP256K1 = 3
-    CURVE25519 = 4
-    MLKEM768 = 5
-    XWING = 6
 
+WEBCRYPTPOLICY_FIELD = _ExtraMessageField.WEBCRYPTPOLICY
 class OnlyKeyUnavailableException(Exception):
     """Exception raised when the connection to the OnlyKey failed."""
     pass
@@ -418,8 +382,18 @@ class OnlyKey(object):
             raise RuntimeError('No PIN set, You must set a PIN first')
         elif outstr.decode(errors="ignore").find("INITIALIZED") != -1:
             raise RuntimeError('OnlyKey is locked, enter PIN to unlock')
-        elif outstr.decode(errors="ignore").find("Error incorrect challenge was entered") != -1:
-            raise RuntimeError('Error incorrect challenge was entered')
+        elif outstr.decode(errors="ignore").find(KnownResponse.WRONG_CHALLENGE.value) != -1:
+            raise RuntimeError(KnownResponse.WRONG_CHALLENGE.value)
+        # The device used to call all three of these a wrong challenge. A late
+        # press and a press-mode rejection are now named separately, and they
+        # are not the same advice: one means press sooner, one means the key
+        # did not take the press at all, and only the first means the digits
+        # were wrong. Raised verbatim, like every other line here, so the
+        # device's own words reach the caller.
+        elif outstr.decode(errors="ignore").find(KnownResponse.CONFIRMATION_WINDOW_CLOSED.value) != -1:
+            raise RuntimeError(KnownResponse.CONFIRMATION_WINDOW_CLOSED.value)
+        elif outstr.decode(errors="ignore").find(KnownResponse.PRESS_NOT_ACCEPTED.value) != -1:
+            raise RuntimeError(KnownResponse.PRESS_NOT_ACCEPTED.value)
         elif outstr.decode(errors="ignore").find("No PIN set, You must set a PIN first") != -1:
             raise RuntimeError('Error OnlyKey must be configured first')
         elif outstr.decode(errors="ignore").find("Timeout occured while waiting for confirmation on OnlyKey") != -1:
@@ -481,6 +455,13 @@ class OnlyKey(object):
         slots = []
         for _ in range(24):
             data = self.read_string().split('|')
+            # A device with fewer labels than the loop count stops answering,
+            # and read_string() returns ''. ord('') is a TypeError, so the
+            # command died rather than finishing with the labels it had:
+            #   TypeError: ord() expected a character, but string of length 0
+            # Nothing here needs all 24 - the loop is an upper bound.
+            if not data[0]:
+                break
             slot_number = ord(data[0])
             if slot_number >= 16:
                 slot_number = slot_number - 6
@@ -498,11 +479,52 @@ class OnlyKey(object):
         slots = []
         for _ in range(20):
             data = self.read_string().split('|')
+            if not data[0]:   # see getduolabels() above - same empty-read guard
+                break
             slot_number = ord(data[0])
             if 25 <= slot_number <= 44:
                 slots.append(Slot(slot_number, label=data[1]))
 
         return slots
+
+    def getcapabilities(self):
+        """Ask the firmware what it supports (OKGETLABELS with selector 'c').
+
+        Returns the dict from onlykey.protocol.parse_capabilities, or None on
+        firmware that predates the capabilities report (it answers with slot
+        labels instead, which are drained here so the next read is clean)."""
+        self.send_message(msg=Message.OKGETLABELS, payload=[CAPABILITIES_SELECTOR[0]])
+        time.sleep(0.2)
+        first = self.read_bytes(MAX_INPUT_REPORT_SIZE, timeout_ms=500)
+        caps = parse_capabilities(first)
+        if caps is None:
+            for _ in range(12):  # old firmware: drain the slot-label reply
+                if not self.read_bytes(MAX_INPUT_REPORT_SIZE, timeout_ms=100):
+                    break
+        return caps
+
+    def is_duo(self):
+        """True for an OnlyKey DUO. Uses the capabilities report (firmware
+        3.1.0+); older firmware falls back to the version-string suffix
+        (\'c\' = Color/original, \'d\' = DUO)."""
+        caps = self.getcapabilities()
+        if caps is not None:
+            return CapabilityFlag.DUO in caps['flags']
+        self.set_time(time.time())
+        version = self.read_string()
+        return not version.rstrip().endswith('c')
+
+    def displaycapabilities(self):
+        caps = self.getcapabilities()
+        if caps is None:
+            print('Firmware does not report capabilities (older than protocol v1)')
+            return
+        print('firmware      ', caps['version'])
+        print('protocol      ', caps['protocol_version'])
+        print('key types     ', ' '.join(k.name for k in caps['key_types']))
+        print('flags         ', ' '.join(f.name for f in caps['flags']) or '-')
+        for field, modes in caps['user_input_modes'].items():
+            print('%-14s' % field.lower(), ' '.join(m.name.lower() for m in modes))
 
     def displaykeylabels(self):
         global slot
@@ -539,52 +561,101 @@ class OnlyKey(object):
         # slot 131-132 Reserved
         # slot 129-130 HMAC Keys
         # slot 101-116 ECC Keys
-        # slot 1-4 RSA Keys
-        # set key type
-        if key_type == 'x':
-            key_type = '1'
-        elif key_type == 'n':
-            key_type = '2'
-        elif key_type == 's':
-            key_type = '3'
-        elif key_type == 'm':
-            key_type = '5'
-        elif key_type == 'w':
-            key_type = '6'
-        elif key_type == 'h':
-            key_type = '9'
-        # set key features
-        if key_features == 'd':
-            key_type = int(key_type) + 32 # Decrypt flag
-        elif key_features == 's':
-            key_type = int(key_type) + 64 # Sign flag
-        elif key_features == 'b':
-            key_type = int(key_type) + 32 # Decrypt flag
-            key_type = int(key_type) + 128 # Backup flag
+        # slot 1-4 RSA Keys (also composite PQC PGP keys - see 'p' below)
+        #
+        # 'p' is a composite PQC PGP key and takes a different road out of this
+        # function. It lives in an RSA slot, but its 160-byte seed blob is
+        # chunked 57/57/46 with a fixed type byte rather than sliced into the
+        # 114-char pieces the RSA branches below use, and - unlike everything
+        # else here - the device's acknowledgement is READ rather than printed.
+        # That matters: OKSETPRIV is refused outside config mode, and a
+        # composite key cannot be read back afterwards (okcrypto_getpubkey()
+        # has no KEYTYPE_PQC_PGP branch), so an unchecked reply means a stored
+        # key and an empty slot look identical. load_composite_key() raises
+        # instead.
+        if key_type == 'p':
+            from . import pqc
+            if key_features:
+                raise ValueError(
+                    "composite PQC PGP keys take no feature letter - they are "
+                    "always decrypt and sign (type byte 0x%02x), fixed by what "
+                    "the algorithm is. Use: setkey PQC<1-4> p <%d hex chars>"
+                    % (pqc.PQC_KEY_TYPE_BYTE, pqc.PQC_PGP_BLOB_LEN * 2))
+            try:
+                blob = bytes.fromhex(value.strip())
+            except ValueError:
+                raise ValueError(
+                    "composite PQC PGP key must be %d hex characters "
+                    "(a %d-byte seed blob)"
+                    % (pqc.PQC_PGP_BLOB_LEN * 2, pqc.PQC_PGP_BLOB_LEN))
+            # Slot range and blob length are checked inside, and the device's
+            # acknowledgement is read there - so reaching the next line means
+            # the load happened. Say so: this branch returns before setkey()'s
+            # own print(self.read_string()) at the bottom, so without this a
+            # successful load produced NO OUTPUT AT ALL, which is exactly the
+            # silent-success shape this file has been fixing elsewhere.
+            pqc.load_composite_key(self, slot_number, blob)
+            print('Loaded composite PQC PGP key (%d bytes) into PQC%d'
+                  % (len(blob), slot_number))
+            return
+        # set key type + features from the shared CLI letter tables
+        # (setkey <slot> <x|n|s|c|m|w|h> <d|s|b> <hex>); a numeric key_type is
+        # passed through. The tables come from the generated protocol module,
+        # which is why this is eight lines instead of the old if/elif ladder.
+        if key_type in CLI_KEY_LETTERS:
+            key_type = int(CLI_KEY_LETTERS[key_type])
         else:
             key_type = int(key_type)
+        # An unrecognised feature letter is an ERROR, not zero flags.
+        # key_type |= CLI_KEY_FEATURES.get(key_features, 0) silently dropped
+        # the flags on a typo, producing a key the device would not use for
+        # the operation it was loaded for - and, because the bare type is
+        # below 16, an odd-length payload on the wire behind it.
+        if key_features:
+            if key_features not in CLI_KEY_FEATURES:
+                raise ValueError(
+                    "key_features must be '' or one of 'd' (decrypt), "
+                    "'s' (sign), 'b' (backup); got %r" % (key_features,))
+            key_type |= int(CLI_KEY_FEATURES[key_features])
         logging.debug('SETTING KEY IN SLOT:', slot_number)
         logging.debug('TO TYPE:', key_type)
         logging.debug('KEY:', value)
         if slot_number >= 1 and slot_number <= 4:
             if key_type & 0xf == 2: # RSA 2048
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[:114])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[114:228])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[228:342])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[342:456])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[456:512])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[:114])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[114:228])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[228:342])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[342:456])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[456:512])
             elif key_type & 0xf == 4: # RSA 4096
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[:114])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[114:228])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[228:342])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[342:456])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[456:570])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[570:684])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[684:798])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[798:912])
-                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value[912:1024])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[:114])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[114:228])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[228:342])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[342:456])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[456:570])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[570:684])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[684:798])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[798:912])
+                self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value[912:1024])
+            else:
+                # The `else` below belongs to the SLOT test, not to these two
+                # branches, so an RSA slot carrying any other key type used to
+                # fall out of setkey() having sent NOTHING - and then sleep a
+                # second and print the device's empty read, which looks exactly
+                # like a quiet success. `setkey RSA1 7 d <blob>` reported
+                # nothing wrong and loaded nothing.
+                #
+                # RSA slots take 2048 and 4096 here and nothing else. A
+                # composite PQC key also lives in an RSA slot, but its 160-byte
+                # blob is chunked by pqc.load_composite_key() rather than by
+                # this function, and `loadpqc` is the only way in.
+                raise ValueError(
+                    "RSA slots take key type 2 (RSA-2048) or 4 (RSA-4096); "
+                    "got %d. A composite PQC PGP key loads with "
+                    "`onlykey-cli loadpqc <keyfile> PQC%d`."
+                    % (key_type & 0xf, slot_number))
         else:
-            self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, 'x')+value)
+            self.send_message(msg=Message.OKSETPRIV, slot_id=slot_number, payload=format(key_type, '02x')+value)
         time.sleep(1)
         print(self.read_string())
 
@@ -873,7 +944,7 @@ class OnlyKey(object):
 
         print('Setting backup passphrase...')
         self.send_message(msg=Message.OKSETPRIV, slot_id=slot,
-                         payload=format(key_type, 'x') + hex_key)
+                         payload=format(key_type, '02x') + hex_key)
         time.sleep(1)
         print(self.read_string())
 

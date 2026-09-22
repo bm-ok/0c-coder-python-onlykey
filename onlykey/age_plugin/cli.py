@@ -26,7 +26,7 @@ from onlykey.age_plugin import (
 from onlykey.age_plugin.bech32 import bech32_encode, bech32_decode
 from onlykey.age_plugin.protocol import (
     Stanza, b64encode_no_pad, b64decode_no_pad,
-    run_identity_v1, run_recipient_v1,
+    run_identity_v1, run_recipient_v1, notify,
 )
 
 
@@ -250,6 +250,15 @@ def unwrap_callback(identities, stanzas_per_file):
                     results.append((file_idx, file_key))
                     break
                 except Exception as e:
+                    # Through the `msg` channel, not stderr: age discards a
+                    # plugin's stderr and reports its own generic
+                    # "no identity matched any of the recipients", so the
+                    # device's actual words - "Timeout occured while waiting
+                    # for confirmation on OnlyKey", "OnlyKey is locked" - never
+                    # reached the user. Same gap the prompt had, on the error
+                    # path instead: measured 2026-09-21, where a missed button
+                    # press was indistinguishable from a wrong identity.
+                    notify(f"derived unwrap failed: {e}")
                     print(f"derived unwrap failed: {e}", file=sys.stderr)
                     continue
 

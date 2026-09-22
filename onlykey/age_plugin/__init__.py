@@ -11,12 +11,17 @@ compatibility with every age recipient or identity flow.
 __version__ = "0.1.0"
 PLUGIN_NAME = "onlykey"
 
-# OnlyKey HID opcodes (values match onlykey.client.Message)
-OKGETPUBKEY = 236   # Message.OKGETPUBKEY
-OKDECRYPT = 240     # Message.OKDECRYPT
-OKSETPRIV = 239     # Message.OKSETPRIV — also generates an on-device key when
-                    # the key body is all 0xFF (firmware okcore.cpp set_private
-                    # -> okcrypto_generate_random_key)
+# Protocol constants come from the generated onlykey.protocol module (single
+# source: libraries/onlykey/protocol/onlykey-protocol.json); the names below are
+# kept for the plugin's callers.
+from onlykey.protocol import Message, KeyType, ReservedSlot
+
+OKGETPUBKEY = int(Message.OKGETPUBKEY)
+OKDECRYPT = int(Message.OKDECRYPT)
+OKSETPRIV = int(Message.OKSETPRIV)   # also generates an on-device key when
+                                     # the key body is all 0xFF (firmware
+                                     # okcore.cpp set_private ->
+                                     # okcrypto_generate_random_key)
 
 # ECC key slots that can hold the 32-byte post-quantum seed.
 #
@@ -48,14 +53,14 @@ def validate_ecc_slot(slot):
 
 # Firmware key-type identifiers (okcore.h: KEYTYPE_MLKEM768 / KEYTYPE_XWING).
 # Sent in the low nibble of buffer[6] so the device routes the operation.
-KEYTYPE_MLKEM768 = 5
-KEYTYPE_XWING = 6
+KEYTYPE_MLKEM768 = int(KeyType.MLKEM768)
+KEYTYPE_XWING = int(KeyType.XWING)
 
 # Reserved web-and-agent derivation key slot (okcore.h RESERVED_KEY_WEB_DERIVATION). Used
 # for DERIVED (label-based) X-Wing: the device derives sk_X + an ML-KEM seed from
 # (web-and-agent derivation key, 32-byte label tag, RPID="onlyagent.app") and never stores
 # a key. This is the split-custody path that interoperates with the web app.
-RESERVED_KEY_WEB_DERIVATION = 128
+RESERVED_KEY_WEB_DERIVATION = int(ReservedSlot.WEB_DERIVATION)
 
 # An all-0xFF key body sent with OKSETPRIV tells the firmware to generate the
 # key on-device (gen_key trigger in okcore.cpp).

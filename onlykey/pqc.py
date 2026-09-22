@@ -31,7 +31,7 @@ OKSIGN/OKDECRYPT branches), so the request is NOT resent.
 
 Exercise status, because the two halves differ. The LOAD path - the chunked
 OKSETPRIV send in load_composite_key() - has run against a physical OnlyKey via
-`onlykey-cli setpqc`. The binary READ path below (read_exact, and therefore
+`onlykey-cli loadpqc`. The binary READ path below (read_exact, and therefore
 sign() and decrypt()) has been exercised against an emulated device only; it has
 not yet run against hardware.
 """

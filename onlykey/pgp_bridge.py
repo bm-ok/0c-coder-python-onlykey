@@ -58,7 +58,7 @@ def parse_armored(armored, passphrase=None):
 
 
 def composite_blob(armored=None, path=None, passphrase=None):
-    """Return the 160-byte composite PQC blob (bytes) for setpqc / load_composite_key."""
+    """Return the 160-byte composite PQC blob (bytes) for loadpqc / load_composite_key."""
     d = parse_key_file(path, passphrase) if path else parse_armored(armored, passphrase)
     if d.get('type') != 'pqc-composite':
         raise RuntimeError('not a composite PQC PGP key (got %r)' % d.get('type'))

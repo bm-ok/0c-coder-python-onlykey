@@ -13,6 +13,13 @@ import sys
 import time
 
 from onlykey.client import OnlyKey, Message
+# The challenge rule and the error classifier come from the generated
+# protocol module - one source for host and firmware. derived_recipient_payload
+# and derived_decaps_payload are NOT imported: they frame the host-split
+# X-Wing exchange, and this plugin uses the device-custody one (see
+# derive_recipient below), so importing them would be dead weight that reads
+# like the two designs are both live.
+from onlykey.protocol import challenge_code_str, classify_response
 from .protocol import notify
 from . import (
     OKGETPUBKEY, OKDECRYPT, OKSETPRIV, GENERATE_ON_DEVICE,
@@ -30,27 +37,29 @@ MLKEM_CT_SIZE = 1088
 DERIVED_LABEL_TAG_SIZE = 32
 
 
-def challenge_code(msg: bytes, duo: bool = False):
-    """The 3-digit confirmation code the device will display for `msg`.
+def derived_challenge_code_str(request: bytes, duo: bool = False) -> str:
+    """The 3 digits the device shows for a DERIVED request, as "n n n".
 
-    Mirrors okcore_prime_user_confirmation(): the firmware hashes the primed
-    message and takes bytes 0, 15 and 31 modulo the button count.
+    Two hashes, and the reason is that they happen in two different places.
+    okcore_prime_user_confirmation() hashes whatever it is PRIMED with and
+    takes bytes 0, 15, 31 modulo the button count - that rule lives once, in
+    the generated protocol module, as challenge_code_str(). But for a derived
+    operation the value it is primed with is itself SHA256(label_tag || ct),
+    computed in okcrypto.cpp before the confirmation is raised. So the caller
+    holds the raw request, and this hashes it once to get what the device was
+    primed with, then hands that to the shared rule.
 
-        temp   = SHA256(primed_msg)
-        digits = (temp[0] % n) + 1, (temp[15] % n) + 1, (temp[31] % n) + 1
-
-    with n = 6 on a full OnlyKey and 3 on a DUO. For derived decapsulation the
-    primed message is itself SHA256(label_tag || ciphertext), so callers pass
-    the concatenation and this applies both hashes.
+    NAMED DIFFERENTLY ON PURPOSE. This file used to define its own
+    `challenge_code_str` doing both hashes inline, which SHADOWED the import
+    of the shared one - same name, different input contract (local(x) ==
+    shared(sha256(x)), verified across five vectors). It produced the right
+    digits only because the local definition came after the import and the
+    callers happened to match its contract. Anyone deleting the "duplicate"
+    would have silently started displaying the wrong code, and a wrong code in
+    challenge mode is `Error incorrect challenge was entered` - the failure
+    that cost a day on 2026-09-16. One rule, two names, no shadowing.
     """
-    primed = hashlib.sha256(msg).digest()
-    temp = hashlib.sha256(primed).digest()
-    n = 3 if duo else 6
-    return tuple((temp[i] % n) + 1 for i in (0, 15, 31))
-
-
-def challenge_code_str(msg: bytes, duo: bool = False) -> str:
-    return " ".join(str(d) for d in challenge_code(msg, duo))
+    return challenge_code_str(hashlib.sha256(bytes(request)).digest(), duo)
 
 
 def derived_label_tag(label):
@@ -141,8 +150,8 @@ class OnlyKeyPQ:
                 continue
             if not data:
                 continue
-            text = bytes(data).decode("ascii", errors="ignore")
-            if text.startswith("Error"):
+            kind, text = classify_response(data)
+            if kind == "error":
                 raise RuntimeError(f"OnlyKey: {text.strip()}")
             result.extend(data)
             if expected_size and len(result) >= expected_size:
@@ -266,7 +275,7 @@ class OnlyKeyPQ:
         # nothing on the device telling the user what to type.
         notify(
             "Confirm on OnlyKey: press any button, or if it is set to "
-            "challenge-code mode enter %s" % challenge_code_str(tag + bytes(ciphertext))
+            "challenge-code mode enter %s" % derived_challenge_code_str(tag + bytes(ciphertext))
         )
         self.ok.send_large_message2(
             msg=Message(OKDECRYPT), payload=list(tag + bytes(ciphertext)),
