@@ -1397,12 +1397,12 @@ def cli():
                     continue
             elif data[0] in ('webagentderivemode', 'webderivemode'):
                 try:
-                    only_key.setslot(1, MessageField.WEBAGENTDERIVEMODE, int(data[1]))
+                    only_key.setslot(1, MessageField.WEBDERIVEMODE, int(data[1]))
                 except:
                     continue
             elif data[0] == 'webcryptpolicy':
                 try:
-                    only_key.setslot(1, MessageField.WEBCRYPTPOLICY, int(data[1]))
+                    only_key.setslot(1, WEBCRYPTPOLICY_FIELD, int(data[1]))
                 except:
                     continue
             elif data[0] == 'storedkeymode':
