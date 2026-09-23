@@ -13,7 +13,7 @@ C:\ onlykey-cli.exe getlabels
 [Download here](https://github.com/trustcrypto/python-onlykey/releases/download/v1.2.5/onlykey-cli.exe)
 
 ### Windows Install with dependencies
-1) Python 3.8 and pip3 are required. To setup a Python environment on Windows we recommend Anaconda [https://www.anaconda.com/download/#windows](https://www.anaconda.com/download/#windows)
+1) Python 3.10 or newer and pip3 are required. To setup a Python environment on Windows we recommend Anaconda [https://www.anaconda.com/download/#windows](https://www.anaconda.com/download/#windows)
 
 2) From an administrator command prompt run:
 ```
@@ -23,7 +23,7 @@ pip3 install hidapi==0.9.0 onlykey
 You should see a message showing where the executable is installed. This is usually c:\python39\scripts\onlykey-cli.exe
 
 ### MacOS Install with dependencies
-Python 3.8 and pip3 are required. To setup a Python environment on MacOS we recommend Anaconda [https://www.anaconda.com/download/#macos](https://www.anaconda.com/download/#macos)
+Python 3.10 or newer and pip3 are required. To setup a Python environment on MacOS we recommend Anaconda [https://www.anaconda.com/download/#macos](https://www.anaconda.com/download/#macos)
 ```
 $ brew install libusb
 $ pip3 install onlykey
@@ -207,6 +207,11 @@ User input required to use a derived key (SSH/GPG agent identities)
 User input required to use a web derived key - the OnlyKey web app / OnlyAgent in the browser, and derived X-Wing age decrypt via age-plugin-onlykey. The key itself never changes with this setting.
 0 = Challenge Code Required (the web app / age plugin shows the 3 digits); 1 = Button Press Required (default); 2 = No press (press-free per-site decryption)
 
+#### webcryptpolicy [num]
+What the OnlyKey web app (apps.crp.to / apps.onlykey.io) may do with this OnlyKey. Requires firmware v3.0.5 or newer and config mode.
+0 = Derived keys only (stored keys / PGP not available to the web app); 1 = Also allow stored keys (PGP) from the web app; 2 = Turn the web app extension off entirely; 3 = Both bits
+Until this is set the key behaves as older firmware did: the web app may use stored keys.
+
 #### hmackeymode [num]
 Enable or disable button press for HMAC challenge-response
 0 = Button Press Required (default); 1 = Button Press Not Required.
@@ -257,9 +262,10 @@ One of the buttons on OnlyKey can be configured as a lock button.
 
 #### setkey [key slot] [type] [features] [hex key]
 Sets raw private keys and key labels, to set PEM format keys use the OnlyKey App
-  - [key slot] must be key number RSA1 - RSA4, ECC1 - ECC16, HMAC1 - HMAC2
+  - [key slot] must be key number RSA1 - RSA4, PQC1 - PQC4, ECC1 - ECC16, HMAC1 - HMAC2
   - [type] must be one of the following:
     - label - set to have a descriptive key label i.e. My GPG signing key
+    - p - Composite PQC PGP seed blob (160 bytes; PQC1 - PQC4 only, see loadpqc)
     - x - Ed25519 Key Type (32 bytes, signing)
     - n - NIST256P1 Key Type (32 bytes)
     - s - SECP256K1 Key Type (32 bytes)
@@ -291,9 +297,18 @@ Generates random private key on device
     - b - Use for encryption/decryption of backups
   - For generating key see example [here](https://docs.crp.to/command-line.html#writing-private-keys-and-passwords).
 
+#### loadpqc [keyfile] [PQC1-PQC4] [passphrase]
+Loads a composite post-quantum PGP private key (ML-KEM-768 + X25519 / ML-DSA-65 + Ed25519, IETF OpenPGP-PQC) from an armored key file into one of the four PQC slots (the RSA slots). Requires firmware v3.0.5 or newer, config mode, and **Node.js** on PATH (the key file is parsed with the bundled OpenPGP.js). A raw 160-byte seed blob can instead be loaded with `setkey PQC1 p [hex]`.
+
 #### wipekey [key id]
 Erases key stored at [key id]
-  - [key id] must be key number RSA1 - RSA4, ECC1 - ECC16, HMAC1 - HMAC2
+  - [key id] must be key number RSA1 - RSA4, PQC1 - PQC4, ECC1 - ECC16, HMAC1 - HMAC2
+
+### age plugin (age-plugin-onlykey)
+Installed with `pip3 install "onlykey[age]"`. Lets [age](https://age-encryption.org) encrypt to and decrypt with an OnlyKey using X-Wing (ML-KEM-768 + X25519) keys. Requires firmware v3.0.5 or newer.
+  - `age-plugin-onlykey --generate` - generate an X-Wing key on the device
+  - `age-plugin-onlykey --identity` / `--recipient` - print the identity file line / the recipient for a stored key
+  - `age-plugin-onlykey --derived --label NAME --recipient` - a derived recipient for a label; the private key never leaves the device and the same label gives the same recipient in the OnlyKey web app
 
 ### FIDO2 Config Options
 
@@ -579,3 +594,7 @@ Once removed, list current resident keys to verify:
 ## Source
 
 [OnlyKey CLI on Github](https://github.com/trustcrypto/python-onlykey)
+
+## Third-party code
+
+`onlykey/openpgp_bridge/openpgp.js` is [OpenPGP.js](https://openpgpjs.org) v6, licensed under the GNU LGPL v3. `loadpqc` runs it (through Node.js) to read composite PQC PGP key files.
