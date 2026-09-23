@@ -746,9 +746,10 @@ def cli():
                 sys.exit(1)
             only_key.setslot(1, field, int(sys.argv[2]))
         elif sys.argv[1] == 'webcryptpolicy':
-            # Field 31 bitfield: 0 = defaults (derived keys yes, PGP no,
+            # Field 31 bitfield: 0 = derived keys only (stored-key PGP off,
             # extension on), 1 = also allow stored-key PGP over FIDO2,
             # 2 = disable the FIDO2 extension entirely, 3 = both bits.
+            # Never written (new or upgraded key) behaves as 1, like v3.0.4.
             # The firmware refuses undefined bits rather than masking them,
             # so the host validates the same range instead of guessing.
             if len(sys.argv) < 3 or sys.argv[2] not in ('0', '1', '2', '3'):
