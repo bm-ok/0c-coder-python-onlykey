@@ -58,7 +58,7 @@ KEYTYPE_XWING = int(KeyType.XWING)
 
 # Reserved web-and-agent derivation key slot (okcore.h RESERVED_KEY_WEB_DERIVATION). Used
 # for DERIVED (label-based) X-Wing: the device derives sk_X + an ML-KEM seed from
-# (web-and-agent derivation key, 32-byte label tag, RPID="onlyagent.app") and never stores
+# (web-and-agent derivation key, 32-byte label tag) and never stores
 # a key. This is the split-custody path that interoperates with the web app.
 RESERVED_KEY_WEB_DERIVATION = int(ReservedSlot.WEB_DERIVATION)
 

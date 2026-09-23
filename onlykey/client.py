@@ -663,7 +663,15 @@ class OnlyKey(object):
         logging.debug('WIPING KEY IN SLOT:', slot_number)
         self.send_message(msg=Message.OKWIPEPRIV, slot_id=slot_number, payload='00')
         time.sleep(1)
-        print(self.read_string())
+        result = self.read_string()
+        print(result)
+        # The label clear below is an OKSETSLOT, which is not gated on config
+        # mode - so after a REFUSED wipe it still succeeded, the key stayed on
+        # the device without its label, and the last line printed was
+        # "Successfully set Label", which reads as though the wipe happened.
+        # Only clear the label of a key that was actually wiped.
+        if is_error(result.encode("latin-1", "replace")):
+            return
         if slot_number > 100:
             self.send_message(msg=Message.OKSETSLOT, slot_id=slot_number-100+28, message_field=MessageField.LABEL, payload="", from_ascii=True)
         elif slot_number > 0:

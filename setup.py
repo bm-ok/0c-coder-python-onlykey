@@ -10,7 +10,7 @@ with open(path.join(here, 'README.md'), encoding='utf-8') as f:
 
 setup(
     name='onlykey',
-    version='1.2.11',
+    version='1.3.0',
     description='OnlyKey client and command-line tool',
     long_description=long_description,
     long_description_content_type='text/markdown',
@@ -30,8 +30,12 @@ setup(
         'Programming Language :: Python :: 3.12',
         'Programming Language :: Python :: 3.13',
     ],
-    packages=find_packages(exclude=['contrib', 'docs', 'tests']),
-    package_data={'onlykey': ['openpgp_bridge/*.js']},
+    # openpgp_bridge holds only .js (no __init__.py), so find_packages() does
+    # not see it and setuptools warns that the data will be dropped by a future
+    # release. Naming it as a package keeps bridge.js and openpgp.js in the wheel
+    # at the path pgp_bridge.py loads them from.
+    packages=find_packages(exclude=['contrib', 'docs', 'tests']) + ['onlykey.openpgp_bridge'],
+    package_data={'onlykey.openpgp_bridge': ['*.js']},
     include_package_data=True,
     entry_points = {
         'console_scripts': [
