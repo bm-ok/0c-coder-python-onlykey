@@ -63,7 +63,7 @@ print('You should see your OnlyKey blink 3 times')
 print()
 
 
-message = 'Secret Message'
+message = b'Secret Message'
 counter = b"\x00\x00\x00\x01"
 shared_secret = curve.calculateAgreement(alice_private_key, bob_public_key)
 h = hashlib.sha256()

@@ -104,7 +104,7 @@ d = h.digest()
 assert len(d) == 32
 
 def get_button(byte):
-    ibyte = ord(byte)
+    ibyte = byte  # indexing bytes gives an int in Python 3
     if ibyte < 6:
         return 1
     return ibyte % 5 + 1

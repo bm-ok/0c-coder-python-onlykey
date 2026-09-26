@@ -123,7 +123,7 @@ assert ok_pubkey == public_n
 print('Ok, public N matches')
 print()
 
-message = 'Secret message'
+message = b'Secret message'
 #h = SHA.new(message)
 cipher = PKCS1_v1_5.new(key)
 ciphertext = cipher.encrypt(message)
@@ -141,7 +141,7 @@ d = h.digest()
 assert len(d) == 32
 
 def get_button(byte):
-    ibyte = ord(byte)
+    ibyte = byte  # indexing bytes gives an int in Python 3
     if ibyte < 6:
         return 1
     return ibyte % 5 + 1

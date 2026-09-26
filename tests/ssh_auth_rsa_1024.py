@@ -39,7 +39,7 @@ def pack_long(n):
     it seems to be want you wanted? it's 64 bytes.
     """
     h = '%x' % n
-    s = ('0'*(len(h) % 2) + h).decode('hex')
+    s = bytes.fromhex('0'*(len(h) % 2) + h)
     return s
 
 print('Done')
@@ -94,7 +94,7 @@ print()
 print('Trying to read the public RSA N part 1...')
 ok.send_message(msg=Message.OKGETPUBKEY, payload=chr(1))  #, payload=[1, 1])
 time.sleep(1.5)
-for _ in xrange(10):
+for _ in range(10):
     ok_pubkey1 = ok.read_bytes(64, to_bytes=True)
     if len(ok_pubkey1) == 64:
         break
@@ -105,7 +105,7 @@ print()
 print('received=', repr(ok_pubkey1))
 
 print('Trying to read the public RSA N part 2...')
-for _ in xrange(10):
+for _ in range(10):
     ok_pubkey2 = ok.read_bytes(64, to_bytes=True)
     if len(ok_pubkey2) == 64:
         break
@@ -140,7 +140,7 @@ d = h.digest()
 assert len(d) == 32
 
 def get_button(byte):
-    ibyte = ord(byte)
+    ibyte = byte  # indexing bytes gives an int in Python 3
     if ibyte < 6:
         return 1
     return ibyte % 5 + 1

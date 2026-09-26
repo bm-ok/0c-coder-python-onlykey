@@ -92,7 +92,7 @@ print()
 print('Trying to read the public RSA N part 1...')
 ok.send_message(msg=Message.OKGETPUBKEY, payload=chr(1))  #, payload=[1, 1])
 time.sleep(1.5)
-for _ in xrange(10):
+for _ in range(10):
     ok_pubkey1 = ok.read_bytes(64, to_bytes=True, timeout_ms=1000)
     if len(ok_pubkey1) == 64:
         break
@@ -103,7 +103,7 @@ print()
 print('received=', repr(ok_pubkey1))
 
 print('Trying to read the public RSA N part 2...')
-for _ in xrange(10):
+for _ in range(10):
     ok_pubkey2 = ok.read_bytes(64, to_bytes=True, timeout_ms=1000)
     if len(ok_pubkey2) == 64:
         break
@@ -114,7 +114,7 @@ print()
 print('received=', repr(ok_pubkey2))
 
 print('Trying to read the public RSA N part 3...')
-for _ in xrange(10):
+for _ in range(10):
     ok_pubkey3 = ok.read_bytes(64, to_bytes=True, timeout_ms=1000)
     if len(ok_pubkey3) == 64:
         break
@@ -125,7 +125,7 @@ print()
 print('received=', repr(ok_pubkey3))
 
 print('Trying to read the public RSA N part 4...')
-for _ in xrange(10):
+for _ in range(10):
     ok_pubkey4 = ok.read_bytes(64, to_bytes=True, timeout_ms=1000)
     if len(ok_pubkey4) == 64:
         break
@@ -136,7 +136,7 @@ print()
 print('received=', repr(ok_pubkey4))
 
 print('Trying to read the public RSA N part 5...')
-for _ in xrange(10):
+for _ in range(10):
     ok_pubkey5 = ok.read_bytes(64, to_bytes=True, timeout_ms=1000)
     if len(ok_pubkey5) == 64:
         break
@@ -147,7 +147,7 @@ print()
 print('received=', repr(ok_pubkey5))
 
 print('Trying to read the public RSA N part 6...')
-for _ in xrange(10):
+for _ in range(10):
     ok_pubkey6 = ok.read_bytes(64, to_bytes=True, timeout_ms=1000)
     if len(ok_pubkey6) == 64:
         break
@@ -167,7 +167,7 @@ assert ok_pubkey == public_n
 print('Ok, public N matches')
 print()
 
-message = 'Secret message'
+message = b'Secret message'
 #h = SHA.new(message)
 cipher = PKCS1_v1_5.new(key)
 ciphertext = cipher.encrypt(message)
@@ -185,7 +185,7 @@ d = h.digest()
 assert len(d) == 32
 
 def get_button(byte):
-    ibyte = ord(byte)
+    ibyte = byte  # indexing bytes gives an int in Python 3
     if ibyte < 6:
         return 1
     return ibyte % 5 + 1
