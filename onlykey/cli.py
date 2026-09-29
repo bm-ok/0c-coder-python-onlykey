@@ -27,6 +27,13 @@ import nacl.signing
 
 from .client import OnlyKey, Message, MessageField, WEBCRYPTPOLICY_FIELD
 
+# How long the CLI waits for the device's answer to a command it just sent.
+# read_string() defaults to ONE 100 ms read: a reply slower than that printed
+# "" and was then read by the NEXT read in the same run (e.g. `touchsense`
+# printed the set-time reply). Seen intermittently on Linux and Windows hosts;
+# worse on slow hosts and BLE. The drain loops keep their own short timeout.
+REPLY_TIMEOUT_MS = 1500
+
 
 def _cli_version():
     """The installed package version - the one number setup.py declares.
@@ -118,7 +125,16 @@ def cli():
         ' When Control-T has been pressed, toggle visibility. '
         hidden[0] = not hidden[0]
 
+    def read_piped_line():
+        # prompt_toolkit needs a real console on Windows ("Found xterm-256color,
+        # while expecting a Windows console"), so a secret piped in - a script,
+        # a test - could not be read there. Piped input is read as one line;
+        # an interactive terminal keeps the hidden prompt below.
+        return sys.stdin.readline().rstrip('\r\n')
+
     def prompt_pass():
+        if not sys.stdin.isatty():
+            return read_piped_line()
         print('Type Control-T to toggle password visible.')
         password = prompt('Password/Key: ',
                           is_password=Condition(lambda: hidden[0]),
@@ -126,6 +142,8 @@ def cli():
         return password
 
     def prompt_key():
+        if not sys.stdin.isatty():
+            return read_piped_line()
         print('Type Control-T to toggle key visible.')
         key = prompt('Key: ',
                      is_password=Condition(lambda: hidden[0]),
@@ -139,55 +157,55 @@ def cli():
     if len(sys.argv) > 1:
         if sys.argv[1] == 'settime':
             only_key.set_time(time.time())
-            print(only_key.read_string())
+            print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
         elif sys.argv[1] == 'init':
             while 1:
                 if only_key.read_string(timeout_ms=500) != 'UNINITIALIZED':
                     break
             for msg in [Message.OKSETPIN]:
                 only_key.send_message(msg=msg)
-                print(only_key.read_string())
+                print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                 print ()
                 input('Press the Enter key once you are done')
                 only_key.send_message(msg=msg)
-                print(only_key.read_string())
+                print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                 only_key.send_message(msg=msg)
-                print(only_key.read_string())
+                print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                 print ()
                 input('Press the Enter key once you are done')
                 only_key.send_message(msg=msg)
                 time.sleep(1.5)
-                print(only_key.read_string())
+                print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                 print ()
             for msg in [Message.OKSETPDPIN]:
                 only_key.send_message(msg=msg)
-                print(only_key.read_string() + ' for second profile')
+                print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS) + ' for second profile')
                 print ()
                 input('Press the Enter key once you are done')
                 only_key.send_message(msg=msg)
-                print(only_key.read_string() + ' for second profile')
+                print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS) + ' for second profile')
                 only_key.send_message(msg=msg)
-                print(only_key.read_string())
+                print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                 print ()
                 input('Press the Enter key once you are done')
                 only_key.send_message(msg=msg)
                 time.sleep(1.5)
-                print(only_key.read_string())
+                print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                 print ()
             for msg in [Message.OKSETSDPIN]:
                 only_key.send_message(msg=msg)
-                print(only_key.read_string())
+                print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                 print ()
                 input('Press the Enter key once you are done')
                 only_key.send_message(msg=msg)
-                print(only_key.read_string())
+                print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                 only_key.send_message(msg=msg)
-                print(only_key.read_string())
+                print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                 print ()
                 input('Press the Enter key once you are done')
                 only_key.send_message(msg=msg)
                 time.sleep(1.5)
-                print(only_key.read_string())
+                print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                 print ()
         elif sys.argv[1] == 'getlabels':
             tmp = {}      
@@ -789,9 +807,12 @@ def cli():
                     features = sys.argv[4]
                 with open(keyfile, 'r') as f:
                     key_data = f.read()
-                passphrase = prompt('Passphrase: ',
-                                   is_password=Condition(lambda: hidden[0]),
-                                   key_bindings=key_bindings)
+                if not sys.stdin.isatty():
+                    passphrase = read_piped_line()
+                else:
+                    passphrase = prompt('Passphrase: ',
+                                       is_password=Condition(lambda: hidden[0]),
+                                       key_bindings=key_bindings)
                 only_key.loadkey(key_data, passphrase, slot=slot, key_features=features)
             except Exception as e:
                 print('Error loading key: {}'.format(str(e)))
@@ -814,12 +835,16 @@ def cli():
         elif sys.argv[1] == 'backuppassphrase':
             try:
                 print('Type Control-T to toggle passphrase visible.')
-                passphrase1 = prompt('Backup Passphrase: ',
-                                    is_password=Condition(lambda: hidden[0]),
-                                    key_bindings=key_bindings)
-                passphrase2 = prompt('Confirm Passphrase: ',
-                                    is_password=Condition(lambda: hidden[0]),
-                                    key_bindings=key_bindings)
+                if not sys.stdin.isatty():
+                    passphrase1 = read_piped_line()
+                    passphrase2 = read_piped_line()
+                else:
+                    passphrase1 = prompt('Backup Passphrase: ',
+                                        is_password=Condition(lambda: hidden[0]),
+                                        key_bindings=key_bindings)
+                    passphrase2 = prompt('Confirm Passphrase: ',
+                                        is_password=Condition(lambda: hidden[0]),
+                                        key_bindings=key_bindings)
                 if passphrase1 != passphrase2:
                     print('Error: Passphrases do not match')
                     return
@@ -851,7 +876,7 @@ def cli():
             only_key.displaycapabilities()
         elif sys.argv[1] == 'fwversion':
             only_key.set_time(time.time())
-            okversion = only_key.read_string()
+            okversion = only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS)
             print(okversion[8:])
         elif sys.argv[1] == 'change-pin':
             if len(sys.argv) > 2:
@@ -945,55 +970,55 @@ def cli():
             # nexte = prompt_pass
             if data[0] == "settime":
                 only_key.set_time(time.time())
-                print(only_key.read_string())
+                print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
             elif data[0] == "init":
                 while 1:
                     if only_key.read_string(timeout_ms=500) != 'UNINITIALIZED':
                         break
                 for msg in [Message.OKSETPIN]:
                     only_key.send_message(msg=msg)
-                    print(only_key.read_string())
+                    print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                     print()
                     input('Press the Enter key once you are done')
                     only_key.send_message(msg=msg)
-                    print(only_key.read_string())
+                    print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                     only_key.send_message(msg=msg)
-                    print(only_key.read_string())
+                    print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                     print()
                     input('Press the Enter key once you are done')
                     only_key.send_message(msg=msg)
                     time.sleep(1.5)
-                    print(only_key.read_string())
+                    print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                     print()
                 for msg in [Message.OKSETPDPIN]:
                     only_key.send_message(msg=msg)
-                    print(only_key.read_string() + ' for second profile')
+                    print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS) + ' for second profile')
                     print()
                     input('Press the Enter key once you are done')
                     only_key.send_message(msg=msg)
-                    print(only_key.read_string() + ' for second profile')
+                    print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS) + ' for second profile')
                     only_key.send_message(msg=msg)
-                    print(only_key.read_string())
+                    print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                     print ()
                     input('Press the Enter key once you are done')
                     only_key.send_message(msg=msg)
                     time.sleep(1.5)
-                    print(only_key.read_string())
+                    print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                     print()
                 for msg in [Message.OKSETSDPIN]:
                     only_key.send_message(msg=msg)
-                    print(only_key.read_string())
+                    print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                     print()
                     input('Press the Enter key once you are done')
                     only_key.send_message(msg=msg)
-                    print(only_key.read_string())
+                    print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                     only_key.send_message(msg=msg)
-                    print(only_key.read_string())
+                    print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                     print()
                     input('Press the Enter key once you are done')
                     only_key.send_message(msg=msg)
                     time.sleep(1.5)
-                    print(only_key.read_string())
+                    print(only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS))
                     print()
             elif data[0] == 'getlabels':
                 tmp = {}      
@@ -1543,7 +1568,7 @@ def cli():
             elif data[0] == 'fwversion':
                 try:
                     only_key.set_time(time.time())
-                    okversion = only_key.read_string()
+                    okversion = only_key.read_string(timeout_ms=REPLY_TIMEOUT_MS)
                     print(okversion[8:])
                 except:
                     continue

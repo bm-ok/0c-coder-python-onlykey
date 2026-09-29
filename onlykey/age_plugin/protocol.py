@@ -90,11 +90,24 @@ def read_stanza(stream=None) -> Stanza | None:
 
 
 def write_stanza(stanza: Stanza, stream=None):
-    """Write a stanza to stdout."""
+    """Write a stanza to stdout.
+
+    The age plugin protocol is LF-only. On Windows a text-mode stdout turns
+    every "\\n" into "\\r\\n", and age then rejects the plugin's reply as a
+    "malformed stanza" - so a real stream is written through its binary
+    buffer, which is never translated. A stream with no buffer (a StringIO in
+    a test) is written as text, as before.
+    """
     if stream is None:
         stream = sys.stdout
-    stream.write(stanza.encode())
-    stream.flush()
+    buffer = getattr(stream, "buffer", None)
+    if buffer is not None:
+        stream.flush()
+        buffer.write(stanza.encode().encode("utf-8"))
+        buffer.flush()
+    else:
+        stream.write(stanza.encode())
+        stream.flush()
 
 
 def write_command(tag: str, args: list[str] = None, body: bytes = b"", stream=None):
