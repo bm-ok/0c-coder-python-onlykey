@@ -554,8 +554,14 @@ class OnlyKey(object):
     def wipeslot(self, slot_number):
         """Wipe all the fields for the given slot."""
         self.send_message(msg=Message.OKWIPESLOT, slot_id=slot_number)
-        for _ in range(8):
-            print(self.read_string())
+        # The device answers once per field it wipes - ten on 3.x firmware. This
+        # read exactly eight replies at 100 ms each: it printed eight of ten,
+        # "" for any slower than 100 ms, and left the rest for the next read.
+        # Wait for the first answer, then read until the device goes quiet.
+        reply = self.read_string(timeout_ms=1500)
+        while reply:
+            print(reply)
+            reply = self.read_string(timeout_ms=500)
 
     def setkey(self, slot_number, key_type, key_features, value):
         # slot 131-132 Reserved
